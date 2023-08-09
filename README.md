@@ -1,16 +1,5 @@
-<div align="center">
 
 # 云图外推实验
-
-
-
-**DELETE EVERYTHING ABOVE FOR YOUR PROJECT**
-
-______________________________________________________________________
-
-<div align="center">
-
-# Your Project Name
 
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
@@ -21,9 +10,14 @@ ______________________________________________________________________
 
 </div>
 
+## 任务列表
+- [ ] 配置实验环境，并设置EarthNet训练流程参数。
+
 ## Description
 
-What it does
+> 卫星云图预测是遥感和图像视觉交叉领域中出现的一个应用**问题**，旨在根据观测时刻历史资料生成未来临近时段内的云图以尽可能同步地反映近实时地面观测网络上空的宏观天气变化。
+
+该项目主要做了相关实验来预测云图。
 
 ## Installation
 

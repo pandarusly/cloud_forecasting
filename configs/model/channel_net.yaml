@@ -1,0 +1,40 @@
+_target_: src.models.cmo.CMOTask
+
+hparams:
+    pred_dir: null
+    loss:
+        name: "masked"
+        args: {
+            distance_type: "L1"
+        }
+    context_length: 10
+    target_length: 20
+    n_stochastic_preds: 1
+    optimization:
+        optimizer:
+            - 
+                name: 'Adam'
+                args: 
+                    lr: 0.05
+                    betas: [0.9, 0.999]
+        lr_shedule:
+            -
+                name: 'MultiStepLR'
+                args:
+                    milestones: [2, 15, 50, 90]
+                    gamma: 0.1
+    keep_val_preds: True
+    n_log_batches: 1
+
+net:
+  _target_: src.models.components.channel_net.Channel_Net
+  hparams:
+    name: "Unet"  # from segmentation_models_pytorch
+    context_length: 10
+    target_length: 20
+    args: 
+        encoder_name: "resnet34"
+        encoder_weights: "imagenet"
+        in_channels: 42
+        classes: 80
+        activation: "sigmoid"

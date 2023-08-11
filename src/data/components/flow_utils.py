@@ -1,8 +1,14 @@
+import cv2
 import numpy as np
 
 import numpy as np
 from matplotlib.colors import hsv_to_rgb
 import matplotlib.pyplot as plt
+
+try:
+    import pyflow
+except ImportError as e:
+    print(e)
 
 
 def load_flow_to_numpy(path):
@@ -42,7 +48,8 @@ def load_flow_to_png(path):
 def write_flo_file(filename, flow_data):
     with open(filename, "wb") as f:
         magic = np.array([202021.25], dtype=np.float32)
-        size = np.array([flow_data.shape[1], flow_data.shape[0]], dtype=np.int32)
+        size = np.array(
+            [flow_data.shape[1], flow_data.shape[0]], dtype=np.int32)
         flow_data = flow_data.astype(np.float32)
 
         # Write the magic number, size, and flow data to the file
@@ -64,6 +71,84 @@ def read_flo_file(filename):
         flow_data = flow_data.reshape((height, width, 2))
 
     return flow_data
+
+
+def get_opticalflow_cv2(image_sequence):
+    # 生成示例数据，19帧[1024, 1024, 3]的随机图像数组
+    # num_frames = 19
+    # image_shape = (1024, 1024, 3)
+    # image_sequence = np.random.randint(
+    #     0, 256, size=(num_frames,) + image_shape, dtype=np.uint8
+    # )
+    num_frames = len(image_sequence)
+    # 初始化光流 第一帧
+    prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)
+    FLOW_ARRAY = []
+    # 循环计算稠密光流
+    for i in range(1, num_frames):
+        curr_frame = cv2.cvtColor(image_sequence[i], cv2.COLOR_RGB2GRAY)
+
+        # 返回一个两通道的光流向量，实际上是每个点的像素位移值
+        flow = cv2.calcOpticalFlowFarneback(
+            prev_frame, curr_frame, None, 0.5, 3, 15, 3, 5, 1.2, 0
+        )
+        FLOW_ARRAY.append(flow)
+        # 更新上一帧
+        prev_frame = curr_frame
+
+    return FLOW_ARRAY
+
+
+# TODO: pyflow 计算速度过慢
+def get_optical_flow_pyflow(image_sequence):
+    """_summary_
+
+    Args:
+        image_sequence (_type_): list of image sequences
+        img_type (int, optional): image type 0 == RGB ( h w 3); 1== GRAY (h w 1). Defaults to 1.
+
+    Returns:
+        _type_: new uv_sequence which length is the length of the image sequence -1.
+    pyr_scale: Any, 0.5
+    levels: Any, 3
+    winsize: Any,  15
+    iterations: Any, 3,
+    poly_n: Any, 5, 
+    poly_sigma: Any,1.2
+    flags: int , 0
+    """
+    # optical flow option
+    alpha = float(0.012)  # 0.012
+    ratio = float(0.75)  # 0.75
+    minWidth = int(20)  # 20
+    nOuterFPIterations = int(1)  # 7
+    nInnerFPIterations = int(1)  # 1
+    nSORIterations = int(30)  # 30
+    img_type = int(1)
+
+    num_frames = len(image_sequence)
+    # 初始化光流 第一帧
+    prev_frame = cv2.cvtColor(
+        image_sequence[0], cv2.COLOR_RGB2GRAY)[:, :, None]
+    prev_frame = np.ascontiguousarray(prev_frame, dtype=np.float64)
+    FLOW_ARRAY = []
+    # 循环计算稠密光流
+    for i in range(1, num_frames):
+        curr_frame = cv2.cvtColor(
+            image_sequence[i], cv2.COLOR_RGB2GRAY)[:, :, None]
+        curr_frame = np.ascontiguousarray(curr_frame, dtype=np.float64)
+        u, v, _ = pyflow.coarse2fine_flow(prev_frame, curr_frame,
+                                          alpha, ratio,
+                                          minWidth, nOuterFPIterations,
+                                          nInnerFPIterations, nSORIterations, img_type)
+        flow = np.concatenate((u[..., None], v[..., None]), axis=2)
+
+        # 返回一个两通道的光流向量，实际上是每个点的像素位移值
+        FLOW_ARRAY.append(flow)
+        # 更新上一帧
+        prev_frame = curr_frame
+
+    return FLOW_ARRAY
 
 
 if __name__ == "__main__":

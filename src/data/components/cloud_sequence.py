@@ -14,8 +14,20 @@ import torch
 from torch.utils.data import Dataset
 
 from imgaug import augmenters as iaa
-import cv2
-from src.data.components.flow_utils import write_flo_file
+from src.data.components.flow_utils import get_optical_flow_pyflow, get_opticalflow_cv2, write_flo_file
+
+
+def get_time(parameter='total'):
+    def deco_func(f):
+        def wrapper(*arg, **kwarg):
+            s_time = time.time()
+            res = f(*arg, **kwarg)
+            e_time = time.time()
+            print('{} time use {}s'.format(parameter, e_time - s_time))
+            return res
+        return wrapper
+    return deco_func
+
 
 random.seed(42)
 # TODO:fixed bug fixed:The issue seems to be with the Intel OpenMP runtime library (libiomp5md.dll) being loaded multiple times or conflicting with another OpenMP runtime library. This can result in performance degradation or incorrect behavior in your program.
@@ -142,45 +154,12 @@ def make_dataset_json(Intinterval, step, directory_path=r"data/data_cloud/H8JPEG
     return json_path
 
 
-def get_opticalflow_cv2(image_sequence):
-    # 生成示例数据，19帧[1024, 1024, 3]的随机图像数组
-    # num_frames = 19
-    # image_shape = (1024, 1024, 3)
-    # image_sequence = np.random.randint(
-    #     0, 256, size=(num_frames,) + image_shape, dtype=np.uint8
-    # )
-    num_frames = len(image_sequence)
-    # 初始化光流 第一帧
-    prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)
-    FLOW_ARRAY = []
-    # 循环计算稠密光流
-    for i in range(1, num_frames):
-        curr_frame = cv2.cvtColor(image_sequence[i], cv2.COLOR_RGB2GRAY)
-
-        # 返回一个两通道的光流向量，实际上是每个点的像素位移值
-        flow = cv2.calcOpticalFlowFarneback(
-            prev_frame, curr_frame, None, 0.5, 3, 15, 3, 5, 1.2, 0
-        )
-        FLOW_ARRAY.append(flow)
-
-        # 在这里，你可以处理光流数据，例如可视化、保存结果等
-        # 这里只是简单地打印出计算的光流向量
-        # print("Frame:", i)
-        # print("Flow shape:", flow.shape)
-        # print("Sample flow vector at (500, 500):", flow[500, 500])
-
-        # 更新上一帧
-        prev_frame = curr_frame
-
-    return FLOW_ARRAY
-
-
 def generate_random_string(length):
     return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
 
 # TODO:fixed tar -czvf x.tar.gz  x --- 使用了gzip进行了有损压缩。会影响JPG的质量。
-class CustomImageDatasetPIL(Dataset):
+class BaseCloudRGBSequenceDataset(Dataset):
     def __init__(
         self,
         data_dir,
@@ -210,11 +189,14 @@ class CustomImageDatasetPIL(Dataset):
         with open(self.split_path, "r") as json_file:
             data = json.load(json_file)
 
-        self.image_list = data
+        self.image_list = sorted(data)
 
-        if get_optical_flow:
+        if get_optical_flow == "opencv_flow":
             self.use_optical_flow = True
             self._get_optical_flow = get_opticalflow_cv2
+        elif get_optical_flow == "pyflow":
+            self.use_optical_flow = True
+            self._get_optical_flow = get_optical_flow_pyflow
 
         if use_transform:
             self.transform = iaa.Sequential(
@@ -282,6 +264,7 @@ class CustomImageDatasetPIL(Dataset):
     def __len__(self):
         return len(self.image_list)
 
+    @get_time("__getitem__")
     def __getitem__(self, idx) -> torch.Tensor:  # t c h w
         image_paths = [
             os.path.join(self.data_dir, basename) for basename in self.image_list[idx]
@@ -316,6 +299,7 @@ class CustomImageDatasetPIL(Dataset):
         data = dict(images=frames, filenames=filenames)
         return data
 
+    @get_time("plot_frames")
     def plot_frames(self, data: Dict, out_directory):
         tensors, filenames = data["images"], data["filenames"]
 
@@ -372,6 +356,7 @@ class CustomImageDatasetPIL(Dataset):
         self.split_path = make_dataset_json(
             Intinterval, step, directory_path, split_path)
 
+    @get_time("make_dataset")
     def make_dataset(
         self, data, out_directory, random_string
     ):  # Get current timestamp):
@@ -410,9 +395,26 @@ class CustomImageDatasetPIL(Dataset):
 
 
 #  opencv is slower than pil
-class CustomImageDatasetCV2(CustomImageDatasetPIL):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+#  TODO:
+class CloudFlowSequenceDataset(BaseCloudRGBSequenceDataset):
+
+    def __init__(self, data_dir, split_path=None, use_transform=False, Intinterval=19, step=1, input_frames_num=6, crop_size=(1024, 1024)):
+        super().__init__(data_dir, split_path, use_transform, Intinterval,
+                         step, input_frames_num, crop_size, get_optical_flow=False, )
+
+    def __getitem__(self, idx) -> torch.Tensor:
+        pass
+        # frame = cv2.imread(image_path)  # Read the image in BGR format using OpenCV
+        # frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+
+#  TODO:
+
+
+class ImageCloudSequenceDataset(BaseCloudRGBSequenceDataset):
+
+    def __init__(self, data_dir, split_path=None, use_transform=False, Intinterval=19, step=1, input_frames_num=6, crop_size=(1024, 1024)):
+        super().__init__(data_dir, split_path, use_transform,
+                         Intinterval, step, input_frames_num, crop_size)
 
     def __getitem__(self, idx) -> torch.Tensor:
         pass
@@ -420,27 +422,46 @@ class CustomImageDatasetCV2(CustomImageDatasetPIL):
         # frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
 
 
-def process_dataset_maker(dataset):
-    for _ in tqdm(range(6), position=1, colour="red"):
+def process_dataset_maker():
+    step = 19
+    Intinterval = 19
+    crop_size = (256, 256)
+    crop_times = 6
+    split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
+    data_dir = "data/data_cloud/H8JPEG_valid"
+    PLot = False
+    flow_type = "pyflow"  # opencv_flow pyflow none
+    augment_save_dir = "data/data_cloud/H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_flo".format(
+        Intinterval, flow_type)
+
+    # data_dir = augment_save_dir
+    # augment_save_dir = f"data/data_cloud/H8JPEG_valid_aug_{crop_size[0]}"
+
+    dataset = BaseCloudRGBSequenceDataset(
+        data_dir=data_dir,
+        use_transform=True,
+        get_optical_flow=flow_type,
+        split_path=split_path,
+        step=step,
+        Intinterval=Intinterval,
+        crop_size=crop_size
+    )
+
+    for _ in tqdm(range(crop_times), position=1, colour="red"):
         random_string = generate_random_string(8)
         for i in tqdm(
             range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
         ):
             data = dataset[i]
 
-            # tensors, filenames = data["images"], data["filenames"]
-            # dataset.plot_frames(data, out_directory="E:\data\H8_demo")
-            def generate_random_string(length):
-                return "".join(
-                    random.choice(string.ascii_letters) for _ in range(length)
+            if PLot:
+                dataset.plot_frames(data, out_directory=augment_save_dir)
+            else:
+                dataset.make_dataset(
+                    data,
+                    out_directory=augment_save_dir,
+                    random_string=random_string,
                 )
-
-            # print(f"generate_random_string: {random_string}")
-            dataset.make_dataset(
-                data,
-                out_directory=augment_save_dir,
-                random_string=random_string,
-            )
 
             if i > 1:  # only test croped image at six loops.
                 break
@@ -449,45 +470,5 @@ def process_dataset_maker(dataset):
 # ----------------------------------------------------------------
 # ls -l data/data_cloud/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
-    step = 19
-    Intinterval = 19
-    crop_size = (256, 256)
-    split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
-    augment_save_dir = "data/data_cloud/H8JPEG_valid_aug"
-    data_dir = "data/data_cloud/H8JPEG_valid"
-    # data_dir = augment_save_dir
-    # augment_save_dir = f"data/data_cloud/H8JPEG_valid_aug_{crop_size[0]}"
 
-    dataset = CustomImageDatasetPIL(
-        data_dir=data_dir,
-        use_transform=True,
-        get_optical_flow=False,
-        split_path=split_path,
-        step=19,
-        Intinterval=19,
-        crop_size=(256, 256)
-    )
-
-    for _ in tqdm(range(6), position=1, colour="red"):
-        random_string = generate_random_string(8)
-        for i in tqdm(
-            range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
-        ):
-            data = dataset[i]
-
-            # tensors, filenames = data["images"], data["filenames"]
-            # dataset.plot_frames(data, out_directory="E:\data\H8_demo")
-            def generate_random_string(length):
-                return "".join(
-                    random.choice(string.ascii_letters) for _ in range(length)
-                )
-
-            print(f"generate_random_string: {random_string}")
-            dataset.make_dataset(
-                data,
-                out_directory=augment_save_dir,
-                random_string=random_string,
-            )
-
-            if i > 1:  # only test croped image at six loops.
-                break
+    process_dataset_maker()

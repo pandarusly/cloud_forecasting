@@ -10,7 +10,7 @@ import segmentation_models_pytorch as smp
 from torch import nn
 
 
-class Channel_Net(nn.Module):
+class Channel_Net(nn.Module):  # TODO: add preprocessing Module
     def __init__(self, hparams: argparse.Namespace):
         super().__init__()
 

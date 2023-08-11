@@ -48,8 +48,7 @@ def load_flow_to_png(path):
 def write_flo_file(filename, flow_data):
     with open(filename, "wb") as f:
         magic = np.array([202021.25], dtype=np.float32)
-        size = np.array(
-            [flow_data.shape[1], flow_data.shape[0]], dtype=np.int32)
+        size = np.array([flow_data.shape[1], flow_data.shape[0]], dtype=np.int32)
         flow_data = flow_data.astype(np.float32)
 
         # Write the magic number, size, and flow data to the file
@@ -94,12 +93,11 @@ def get_opticalflow_cv2(image_sequence):
         )
         FLOW_ARRAY.append(flow)
         # 更新上一帧
-        prev_frame = curr_frame
+        # prev_frame = curr_frame
 
     return FLOW_ARRAY
 
 
-# TODO: pyflow 计算速度过慢
 def get_optical_flow_pyflow(image_sequence):
     """_summary_
 
@@ -113,7 +111,7 @@ def get_optical_flow_pyflow(image_sequence):
     levels: Any, 3
     winsize: Any,  15
     iterations: Any, 3,
-    poly_n: Any, 5, 
+    poly_n: Any, 5,
     poly_sigma: Any,1.2
     flags: int , 0
     """
@@ -121,30 +119,37 @@ def get_optical_flow_pyflow(image_sequence):
     alpha = float(0.012)  # 0.012
     ratio = float(0.75)  # 0.75
     minWidth = int(20)  # 20
-    nOuterFPIterations = int(1)  # 7
+    nOuterFPIterations = int(7)  # 7
     nInnerFPIterations = int(1)  # 1
     nSORIterations = int(30)  # 30
     img_type = int(1)
 
     num_frames = len(image_sequence)
     # 初始化光流 第一帧
-    prev_frame = cv2.cvtColor(
-        image_sequence[0], cv2.COLOR_RGB2GRAY)[:, :, None]
-    prev_frame = np.ascontiguousarray(prev_frame, dtype=np.float64)
+    # prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)[:, :, None]
+    prev_frame = image_sequence[0]
+    prev_frame = np.ascontiguousarray(prev_frame, dtype=np.float64) / 255.0
     FLOW_ARRAY = []
     # 循环计算稠密光流
     for i in range(1, num_frames):
-        curr_frame = cv2.cvtColor(
-            image_sequence[i], cv2.COLOR_RGB2GRAY)[:, :, None]
-        curr_frame = np.ascontiguousarray(curr_frame, dtype=np.float64)
-        u, v, _ = pyflow.coarse2fine_flow(prev_frame, curr_frame,
-                                          alpha, ratio,
-                                          minWidth, nOuterFPIterations,
-                                          nInnerFPIterations, nSORIterations, img_type)
+        # curr_frame = cv2.cvtColor(image_sequence[i], cv2.COLOR_RGB2GRAY)[:, :, None]
+        curr_frame = image_sequence[i]
+        curr_frame = np.ascontiguousarray(curr_frame, dtype=np.float64) / 255.0
+        u, v, _ = pyflow.coarse2fine_flow(
+            prev_frame,
+            curr_frame,
+            alpha,
+            ratio,
+            minWidth,
+            nOuterFPIterations,
+            nInnerFPIterations,
+            nSORIterations,
+            img_type,
+        )
         flow = np.concatenate((u[..., None], v[..., None]), axis=2)
 
         # 返回一个两通道的光流向量，实际上是每个点的像素位移值
-        FLOW_ARRAY.append(flow)
+        # FLOW_ARRAY.append(flow)
         # 更新上一帧
         prev_frame = curr_frame
 

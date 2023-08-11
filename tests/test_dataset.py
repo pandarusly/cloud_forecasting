@@ -18,7 +18,7 @@ import cv2
 from src.data.components.flow_utils import write_flo_file
 
 random.seed(42)
-# TODO:bug fixed:The issue seems to be with the Intel OpenMP runtime library (libiomp5md.dll) being loaded multiple times or conflicting with another OpenMP runtime library. This can result in performance degradation or incorrect behavior in your program.
+# TODO:fixed bug fixed:The issue seems to be with the Intel OpenMP runtime library (libiomp5md.dll) being loaded multiple times or conflicting with another OpenMP runtime library. This can result in performance degradation or incorrect behavior in your program.
 # set KMP_DUPLICATE_LIB_OK=TRUE in Environment Variable Workaround
 # TODO 学习pyflow的Cython打包流程: https://github.com/pathak22/pyflow
 
@@ -37,7 +37,7 @@ def save_image_with_pil(image_data, output_file_path):
     # Save the PIL image to the specified file path
     pil_image.save(output_file_path)
 
-    print("Image saved to:", output_file_path)
+    # print("Image saved to:", output_file_path)
 
 
 def get_strdatetime_filename_mapping_and_list(directory_path):
@@ -45,22 +45,26 @@ def get_strdatetime_filename_mapping_and_list(directory_path):
     pattern = r"(\d{8})_(\d{4})"
 
     strdatetime_list = []
+    datatimes_nums = set()
     # Create a dictionary to map datetime objects to filenames
     datetime_filename_mapping = {}
+    croped_region_nums = set()
     # Loop through each file in the directory
     for filename in os.listdir(directory_path):
         # Use regular expression to find the date and time in the filename
         match = re.search(pattern, filename)
+        croped_preffix= os.path.basename(filename).split('_')[0] # 8
+        croped_region_nums.add(croped_preffix)
         if match:
             date = match.group(1)
             time = match.group(2)
-            strdatetime_list.append(date + time)
+            strdatetime_list.append(croped_preffix+"_"+date + time)
+            datatimes_nums.add(date + time)
+            datetime_filename_mapping[croped_preffix+"_"+date + time] = filename
+    croped_region_nums = len(list(croped_region_nums))
+    datatimes_nums = len(list(datatimes_nums)) 
 
-        # Populate the dictionary
-    for dt, filename in zip(strdatetime_list, os.listdir(directory_path)):
-        datetime_filename_mapping[dt] = filename
-
-    return strdatetime_list, datetime_filename_mapping
+    return sorted(strdatetime_list), datetime_filename_mapping,croped_region_nums,datatimes_nums
 
 
 def generate_subsequent_intervals(
@@ -69,56 +73,73 @@ def generate_subsequent_intervals(
     datetime_filename_mapping: Dict[str, str],  # Use Dict instead of map
     Intinterval: int = 19,
 ):
-    datetime_list = [datetime.strptime(dt, "%Y%m%d%H%M") for dt in strdatetime_list]
-
     subsequent_intervals = []
     if start_index_for_datetime_list + Intinterval >= len(strdatetime_list):
         return subsequent_intervals
 
     tinterval = timedelta(minutes=10)
-    current_datetime = datetime_list[start_index_for_datetime_list]
 
+    current_strdatetime = strdatetime_list[start_index_for_datetime_list]
+    current_datetime = datetime.strptime(current_strdatetime.split("_")[-1], "%Y%m%d%H%M")
+    croped_preffix = current_strdatetime.split("_")[0]
     for _ in range(Intinterval):
         filename = datetime_filename_mapping.get(
-            current_datetime.strftime("%Y%m%d%H%M")
+            croped_preffix+"_"+current_datetime.strftime("%Y%m%d%H%M")
         )
         if filename is None:
             break  # Stop if no corresponding filename
+            # return subsequent_intervals
         subsequent_intervals.append(filename)
         current_datetime += tinterval
 
     return subsequent_intervals
 
 
-def make_dataset_json(Intinterval=19, step=0):
+def make_dataset_json(Intinterval, step,directory_path = r"data/DLDATA/H8JPEG_valid",split_path=None):
     # Intinterval = 19
     # step = 0
-    OVERLAP = Intinterval - step
+    # OVERLAP = Intinterval - step
 
-    # Replace 'path_to_directory' with the actual path to your directory containing the pictures
-    directory_path = r"E:\data\H8JPEG_valid"
+    # Replace 'path_to_directory' with the actual path to your directory containing the pictures 
     (
         strdatetime_list,
         datetime_filename_mapping,
+        croped_region_nums,
+        datatimes_nums
     ) = get_strdatetime_filename_mapping_and_list(directory_path)
 
-    print(f"A total of {len(strdatetime_list)} image!")
+    print(f"A total of {len(strdatetime_list)} image, and has {croped_region_nums} regions; {datatimes_nums} datatimes")
     datasets = []
-    for i in tqdm(
-        range(0, len(strdatetime_list), step + 1), desc="make dataset timestamps"
-    ):
+
+
+    for i in  range(0, croped_region_nums):  
+        time_seris_num  = 0
+        for j in range(0,datatimes_nums, step):
+
+            subsequent_intervals = generate_subsequent_intervals(
+                j, strdatetime_list, datetime_filename_mapping, Intinterval=Intinterval
+            )
+            if len(subsequent_intervals) == Intinterval:
+                datasets.append(subsequent_intervals)
+            
+            time_seris_num +=1
+        # len(datatimes_nums)
         subsequent_intervals = generate_subsequent_intervals(
-            i, strdatetime_list, datetime_filename_mapping, Intinterval=Intinterval
-        )
+                j+datatimes_nums, strdatetime_list, datetime_filename_mapping, Intinterval=Intinterval
+            )
         if len(subsequent_intervals) == Intinterval:
             datasets.append(subsequent_intervals)
 
-    # with open("data/dataset_no_ovelap.json", "w") as f:
-    with open(f"data/dataset_step_{step}_interval_{Intinterval}.json", "w") as f:
-        print(
-            f"only {len(datasets)} time series is valid wihch length is {len(datasets[0])}"
+        
+
+    json_path = f"data/dataset_step_{step}_interval_{Intinterval}.json" if split_path is None else split_path
+
+    print(
+            f"only {time_seris_num} time series is valid wihch has {croped_region_nums} regions and length is {len(datasets[0])} "
         )
+    with open(json_path, "w") as f:
         f.write(json.dumps(datasets))
+    return json_path
 
 
 def get_opticalflow_cv2(image_sequence):
@@ -158,23 +179,39 @@ def generate_random_string(length):
     return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
 
+# TODO:fixed tar -czvf x.tar.gz  x --- 使用了gzip进行了有损压缩。会影响JPG的质量。
 class CustomImageDatasetPIL(Dataset):
     def __init__(
         self,
         data_dir,
-        split_list="data\dataset_step_0_interval_19.json",
+        split_path=None,
         use_transform=False,
         get_optical_flow=False,
-    ):
-        with open(split_list, "r") as json_file:
+        Intinterval=19,
+        step=1,
+        input_frames_num = 6,
+        crop_size =(1024,1024)
+    ):  
+        if not os.path.exists(data_dir):
+            raise FileExistsError(f"data_dir {data_dir} is not exist")
+        self.data_dir = data_dir
+        self.use_transform = use_transform
+        self.interval = Intinterval
+        self.input_frames_num = input_frames_num
+        self.use_optical_flow = False
+        self.split_path = split_path
+        self.crop_size =crop_size
+
+        if not os.path.exists(split_path):
+            self._make_dataset_json(
+                Intinterval=Intinterval, step=step
+            )
+ 
+        with open(self.split_path, "r") as json_file:
             data = json.load(json_file)
 
-        self.data_dir = data_dir
         self.image_list = data
-        self.use_transform = use_transform
-        self.interval = 19
-        self.input_frames_num = 6
-        self.use_optical_flow = False
+
         if get_optical_flow:
             self.use_optical_flow = True
             self._get_optical_flow = get_opticalflow_cv2
@@ -182,7 +219,7 @@ class CustomImageDatasetPIL(Dataset):
         if use_transform:
             self.transform = iaa.Sequential(
                 [
-                    iaa.CropToFixedSize(width=1024, height=1024),  # 裁剪到1024
+                    iaa.CropToFixedSize(width=self.crop_size[0], height=self.crop_size[1]),  # 裁剪到1024
                     # 选择2到4种方法做变换
                     iaa.SomeOf(
                         (2, 4),
@@ -328,9 +365,16 @@ class CustomImageDatasetPIL(Dataset):
                 plt.savefig(output_path, bbox_inches="tight")
                 plt.close()
 
+    
+    def _make_dataset_json(self,Intinterval, step):
+        split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
+        directory_path = self.data_dir
+        self.split_path = make_dataset_json(Intinterval, step,directory_path,split_path)
+    
     def make_dataset(
         self, data, out_directory, random_string
     ):  # Get current timestamp):
+        
         tensors, filenames = data["images"], data["filenames"]
 
         # Create the output directory if it doesn't exist
@@ -375,21 +419,55 @@ class CustomImageDatasetCV2(CustomImageDatasetPIL):
             # frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
 
 
-# ----------------------------------------------------------------
+def process_dataset_maker(dataset):
+    for _ in tqdm(range(6), position=1, colour="red"):
+        random_string = generate_random_string(8)
+        for i in tqdm(
+            range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
+        ):
+            data = dataset[i]
 
+            # tensors, filenames = data["images"], data["filenames"]
+            # dataset.plot_frames(data, out_directory="E:\data\H8_demo")
+            def generate_random_string(length):
+                return "".join(
+                    random.choice(string.ascii_letters) for _ in range(length)
+                )
+
+            print(f"generate_random_string: {random_string}")
+            dataset.make_dataset(
+                data,
+                out_directory=augment_save_dir,
+                random_string=random_string,
+            )
+
+            if i >1 : # only test croped image at six loops.
+                break
+# ----------------------------------------------------------------
+# ls -l data/DLDATA/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
     step = 19
     Intinterval = 19
+    crop_size =(256,256)
     split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
-    # make_dataset_json(Intinterval=Intinterval, step=step)
+    augment_save_dir = "data/DLDATA/H8JPEG_valid_aug"
+    data_dir = "data/DLDATA/H8JPEG_valid"
+    data_dir = augment_save_dir
+    augment_save_dir = f"data/DLDATA/H8JPEG_valid_aug_{crop_size[0]}"
+
+    # split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
+    # directory_path = augment_save_dir
+    # split_path = make_dataset_json(Intinterval, step,directory_path,split_path)
 
     dataset = CustomImageDatasetPIL(
-        data_dir="E:\data\H8JPEG_valid",
+        data_dir=data_dir,
         use_transform=True,
         get_optical_flow=False,
-        split_list=split_path,
-    )
-    # dataset = CustomImageDatasetCV2(data_dir="E:\data\H8JPEG_valid", use_transform=True)
+        split_path=split_path,
+        step = 19,
+        Intinterval = 19,
+        crop_size =(256,256)
+    ) 
 
     for _ in tqdm(range(6), position=1, colour="red"):
         random_string = generate_random_string(8)
@@ -408,6 +486,11 @@ if __name__ == "__main__":
             print(f"generate_random_string: {random_string}")
             dataset.make_dataset(
                 data,
-                out_directory="E:\data\H8_dataset_aug",
+                out_directory=augment_save_dir,
                 random_string=random_string,
             )
+
+            if i >1 : # only test croped image at six loops.
+                break
+
+    

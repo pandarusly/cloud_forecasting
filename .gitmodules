@@ -1,0 +1,3 @@
+[submodule "third-package/CloudCast"]
+	path = third-package/CloudCast
+	url = https://github.com/holmdk/CloudCast.git

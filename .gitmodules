@@ -1,0 +1,3 @@
+[submodule "third_package/cloudcast"]
+	path = third_package/cloudcast
+	url = https://github.com/pandarusly/CloudCast_no_Illegal_imagename.git

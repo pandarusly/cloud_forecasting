@@ -13,6 +13,7 @@ from typing import List, Dict
 from PIL import Image
 import torch
 from torch.utils.data import Dataset
+import pickle
 
 from imgaug import augmenters as iaa
 from src.data.components.flow_utils import (
@@ -22,7 +23,7 @@ from src.data.components.flow_utils import (
     read_flo_file,
 )
 
-
+random.seed(42)
 def get_time(parameter="total"):
     def deco_func(f):
         def wrapper(*arg, **kwarg):
@@ -160,20 +161,23 @@ def make_dataset_json(
         )
         if len(subsequent_intervals) == Intinterval:
             datasets.append(subsequent_intervals)
+    
 
-    json_path = (
-        f"data/dataset_step_{step}_interval_{Intinterval}.json"
-        if split_path is None
-        else split_path
-    )
-    os.makedirs(os.path.dirname(json_path), exist_ok=True)
+    if split_path:
+        json_path =split_path 
+        # json_path = (
+        #     f"data/dataset_step_{step}_interval_{Intinterval}.json"
+        #     if split_path is None
+        #     else split_path
+        # )
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
 
-    print(
-        f"only {time_seris_num} time series is valid wihch has {croped_region_nums} regions and length is {len(datasets[0])} "
-    )
-    with open(json_path, "w") as f:
-        f.write(json.dumps(datasets))
-    return json_path
+        print(
+            f"only {time_seris_num} time series is valid wihch has {croped_region_nums} regions and length is {len(datasets[0])} "
+        )
+        with open(json_path, "w") as f:
+            f.write(json.dumps(datasets))
+    return datasets
 
 
 def generate_random_string(length):
@@ -204,14 +208,16 @@ class BaseCloudRGBSequenceDataset(Dataset):
         self.crop_size = crop_size
 
         if not os.path.exists(split_path):
-            self._make_dataset_json(
+            
+            self.image_list = sorted(self._make_dataset_json(
                 Intinterval=Intinterval, step=step, split_path=split_path
-            )
-
-        with open(self.split_path, "r") as json_file:
-            data = json.load(json_file)
-
-        self.image_list = sorted(data)
+            ))
+            print(f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
+        else:
+            with open(self.split_path, "r") as json_file:
+                data = json.load(json_file)
+            self.image_list = sorted(data)
+            print(f"load samples from {split_path}, got {len(self.image_list)} samples")
 
         if get_optical_flow == "opencv_flow":
             self.use_optical_flow = True
@@ -376,7 +382,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
 
     def _make_dataset_json(self, Intinterval, step, split_path):
         directory_path = self.data_dir
-        self.split_path = make_dataset_json(
+        return make_dataset_json(
             Intinterval, step, directory_path, split_path
         )
 
@@ -397,7 +403,6 @@ class BaseCloudRGBSequenceDataset(Dataset):
                 flow_data = tensor.permute(1, 2, 0).numpy()
                 # image_np_u = flow_data[:, :, 0]
                 # image_np_v = flow_data[:, :, 1]
-
                 base_name = os.path.basename(filename).split(".")[0]
                 output_path = os.path.join(
                     out_directory, f"{random_string}_{base_name}.flo"
@@ -415,6 +420,56 @@ class BaseCloudRGBSequenceDataset(Dataset):
                     out_directory, f"{random_string}_{base_name}.jpg"
                 )
                 save_image_with_pil(image_np, output_path)
+
+    def make_pkldataset(self, data_list, out_dir ,pre_slen=10, aft_slen=10,split="train"):
+        """ make vedios pkl for more speed reading.
+
+        Args:
+            data_list (list): [__getitem__,return types,data["images"], data["filenames"]]
+            out_directory (str): _description_
+            random_string (str): _description_
+        Returns:
+            Vedios (dict): B T C H W: x_region_filename, y_region_filename
+        """ 
+        # def get_timeseries_names(_filename,add_croped_preffix=False):
+        #     # Regular expression pattern to match YYYYMMDD and HHMM in the filename
+        #     pattern = r"(\d{8})_(\d{4})"
+        #     strdatetime_list = [] 
+        #     # Use regular expression to find the date and time in the filename
+        #     match = re.search(pattern, _filename)
+        #     croped_preffix = os.path.basename(_filename).split("_")[0]  # 8 
+        #     if match:
+        #         date = match.group(1)
+        #         time = match.group(2)
+        #         if add_croped_preffix:
+        #             return croped_preffix + "_" + date + time
+        #         else:
+        #             date + time
+        #     else:
+        #         raise ValueError("Could not find date and time")
+        videos = []
+        dataset = {}
+        for data in data_list:
+            # vedio, _ = data["images"].numpy(), data["filenames"]
+            vedio = data["images"].numpy() 
+            # filename = random_string + "_" + get_timeseries_names(filenames[0],add_croped_preffix=True) + "_" + get_timeseries_names(filenames[-1])
+            videos.append(vedio)
+        # stack video frames from each folder
+        data = np.stack(videos)   # btchw 
+        data_x, data_y = data[:, :pre_slen], data[:, pre_slen:]
+        # if the data is in [0, 255], rescale it into [0, 1]
+        # if data.max() > 1.0:
+        #     data = data.astype(np.float32) / 255.0
+        dataset['X_' + split], dataset['Y_' + split] = data_x, data_y 
+
+        # save as a pkl file
+        out_file = os.path.join(out_dir,f"{split}_cloud.pkl")
+        with open(out_file, 'wb') as f:
+            pickle.dump(dataset, f)
+
+        return out_file
+
+
 
 
 #  opencv is slower than pil
@@ -576,11 +631,66 @@ def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
             )
 
 
+def process_pkldataset_maker(data_dir=None,save_dir="data"):
+    random.seed(42)
+    step = 19
+    Intinterval = 19
+    crop_size = (256, 256)
+    crop_times = 1
+    split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
+    data_dir = "data/dataset/H8JPEG_valid" if not data_dir else data_dir
+    flow_type="none"
+    
+    dataset = BaseCloudRGBSequenceDataset(
+        data_dir=data_dir,
+        use_transform=True,
+        get_optical_flow=flow_type,
+        split_path=split_path,
+        step=step,
+        Intinterval=Intinterval,
+        crop_size=crop_size,
+    )
+
+    pre_slen=6
+   
+    for _ in tqdm(range(crop_times), position=1, colour="red"):
+        random_string = generate_random_string(8)
+        vedios = []
+        for i in tqdm(
+            range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
+        ):
+            vedios.append(dataset[i])
+        dataset.make_pkldataset(
+            vedios,save_dir,pre_slen=pre_slen,split=f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}"
+        )
+             
+ 
 # ----------------------------------------------------------------
 # ls -l data/dataset/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
     # process_dataset_maker(PLot=True, flow_type="opencv_flow")
     # augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
-    augment_save_dir = process_dataset_maker(PLot=False, flow_type="opencv_flow")
+    # augment_save_dir = process_dataset_maker(PLot=False, flow_type="opencv_flow")
 
-    process_flo_dataset(flow_type="opencv_flow", data_dir=augment_save_dir)
+    # process_flo_dataset(flow_type="opencv_flow", data_dir=augment_save_dir)
+    # process_pkldataset_maker()
+    from src.utils import show_video_line
+    import pickle
+
+    # load the dataset
+    split = "OhbVrpoi_trian_256_interval-19_pre_slen-6"
+    with open('data\OhbVrpoi_trian_256_interval-19_pre_slen-6_cloud.pkl', 'rb') as f:
+        dataset = pickle.load(f)
+
+    train_x, train_y = dataset[f'X_{split}'], dataset[f'Y_{split}']
+
+    train_x, train_y =  train_x/255., train_y/255.
+    print(train_x.shape)
+    # the shape is B x T x C x H x W
+    # B: the number of samples
+    # T: the number of frames in each sample
+    # C, H, W: the height, width, channel of each frame
+
+    # show the given frames from an example
+    example_idx = 0
+    show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path=None, format='png', use_rgb=True)

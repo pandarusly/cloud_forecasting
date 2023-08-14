@@ -123,7 +123,7 @@ def generate_subsequent_intervals(
 
 
 def make_dataset_json(
-    Intinterval, step, directory_path=r"data/dataset/H8JPEG_valid", split_path=None
+    Intinterval, step, directory_path=r"data/DLDATA/H8JPEG_valid", split_path=None
 ):
     # Intinterval = 19
     # step = 0
@@ -173,7 +173,7 @@ def make_dataset_json(
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
 
         print(
-            f"only {time_seris_num} time series is valid wihch has {croped_region_nums} regions and length is {len(datasets[0])} "
+            f"only {time_seris_num} time series is generated wihch has {croped_region_nums} regions ,and {len(datasets)} time series is valid , length is {len(datasets[0])} "
         )
         with open(json_path, "w") as f:
             f.write(json.dumps(datasets))
@@ -293,7 +293,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
     def __len__(self):
         return len(self.image_list)
 
-    @get_time("__getitem__")
+    # @get_time("__getitem__")
     def __getitem__(self, idx) -> torch.Tensor:  # t c h w
         image_paths = [
             os.path.join(self.data_dir, basename) for basename in self.image_list[idx]
@@ -431,35 +431,20 @@ class BaseCloudRGBSequenceDataset(Dataset):
         Returns:
             Vedios (dict): B T C H W: x_region_filename, y_region_filename
         """ 
-        # def get_timeseries_names(_filename,add_croped_preffix=False):
-        #     # Regular expression pattern to match YYYYMMDD and HHMM in the filename
-        #     pattern = r"(\d{8})_(\d{4})"
-        #     strdatetime_list = [] 
-        #     # Use regular expression to find the date and time in the filename
-        #     match = re.search(pattern, _filename)
-        #     croped_preffix = os.path.basename(_filename).split("_")[0]  # 8 
-        #     if match:
-        #         date = match.group(1)
-        #         time = match.group(2)
-        #         if add_croped_preffix:
-        #             return croped_preffix + "_" + date + time
-        #         else:
-        #             date + time
-        #     else:
-        #         raise ValueError("Could not find date and time")
+ 
         videos = []
         dataset = {}
         for data in data_list:
             # vedio, _ = data["images"].numpy(), data["filenames"]
             vedio = data["images"].numpy() 
-            # filename = random_string + "_" + get_timeseries_names(filenames[0],add_croped_preffix=True) + "_" + get_timeseries_names(filenames[-1])
+           
             videos.append(vedio)
         # stack video frames from each folder
         data = np.stack(videos)   # btchw 
         data_x, data_y = data[:, :pre_slen], data[:, pre_slen:]
         # if the data is in [0, 255], rescale it into [0, 1]
-        # if data.max() > 1.0:
-        #     data = data.astype(np.float32) / 255.0
+        if data.max() > 1.0:
+            data = data.astype(np.float32) / 255.0
         dataset['X_' + split], dataset['Y_' + split] = data_x, data_y 
 
         # save as a pkl file
@@ -528,18 +513,18 @@ def process_dataset_maker(PLot=False, flow_type="opencv_flow", data_dir=None):
     Intinterval = 19
     crop_size = (256, 256)
     crop_times = 1
-    split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/dataset/H8JPEG_valid" if not data_dir else data_dir
+    split_path = f"data/demo_dataset_step_{step}_interval_{Intinterval}.json"
+    data_dir = "data/DLDATA/H8JPEG_valid" if not data_dir else data_dir
     # PLot = False
     # flow_type = "opencv_flow"  # opencv_flow pyflow none
     augment_save_dir = (
-        "data/dataset/H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_PLot{}".format(
+        "data/DLDATA/Demo_H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_PLot{}".format(
             Intinterval, flow_type, PLot
         )
     )
 
     # data_dir = augment_save_dir
-    # augment_save_dir = f"data/dataset/H8JPEG_valid_aug_{crop_size[0]}"
+    # augment_save_dir = f"data/DLDATA/H8JPEG_valid_aug_{crop_size[0]}"
 
     dataset = BaseCloudRGBSequenceDataset(
         data_dir=data_dir,
@@ -567,8 +552,8 @@ def process_dataset_maker(PLot=False, flow_type="opencv_flow", data_dir=None):
                     random_string=random_string,
                 )
 
-            if i == 0:  # only test croped image at six loops.
-                break
+            # if i == 0:  # only test croped image at six loops.
+            #     break
 
     return augment_save_dir
 
@@ -580,17 +565,17 @@ def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
     crop_size = (256, 256)
     # crop_times = 1
     split_path = f"data/flow_dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/dataset/H8JPEG_valid" if not data_dir else data_dir
+    data_dir = "data/DLDATA/H8JPEG_valid" if not data_dir else data_dir
     PLot = False
     # flow_type = "opencv_flow"  # opencv_flow pyflow none
     augment_save_dir = (
-        "data/dataset/H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_PLot{}".format(
+        "data/DLDATA/H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_PLot{}".format(
             Intinterval, flow_type, PLot
         )
     )
 
     # data_dir = augment_save_dir
-    # augment_save_dir = f"data/dataset/H8JPEG_valid_aug_{crop_size[0]}"
+    # augment_save_dir = f"data/DLDATA/H8JPEG_valid_aug_{crop_size[0]}"
 
     dataset = CloudFlowSequenceDataset(
         data_dir=data_dir,
@@ -631,14 +616,14 @@ def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
             )
 
 
-def process_pkldataset_maker(data_dir=None,save_dir="data"):
+def process_pkldataset_maker(data_dir=None,save_dir="data",plot=True):
     random.seed(42)
     step = 19
     Intinterval = 19
     crop_size = (256, 256)
     crop_times = 1
     split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/dataset/H8JPEG_valid" if not data_dir else data_dir
+    data_dir = "data/DLDATA/H8JPEG_valid" if not data_dir else data_dir
     flow_type="none"
     
     dataset = BaseCloudRGBSequenceDataset(
@@ -652,45 +637,51 @@ def process_pkldataset_maker(data_dir=None,save_dir="data"):
     )
 
     pre_slen=6
-   
+    
+    splits=[]
     for _ in tqdm(range(crop_times), position=1, colour="red"):
         random_string = generate_random_string(8)
         vedios = []
         for i in tqdm(
             range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
         ):
+            if plot: # TODO: plot frame sequence is not match .pkl store sequene
+                dataset.plot_frames(dataset[i], out_directory=f"{save_dir}/pkl_images")
             vedios.append(dataset[i])
         dataset.make_pkldataset(
             vedios,save_dir,pre_slen=pre_slen,split=f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}"
         )
-             
+        splits.append(f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}")
+
+    return splits   
  
 # ----------------------------------------------------------------
-# ls -l data/dataset/H8JPEG_valid_aug_256/*.jpg | wc -l
+# ls -l data/DLDATA/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
     # process_dataset_maker(PLot=True, flow_type="opencv_flow")
-    # augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
+    augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
     # augment_save_dir = process_dataset_maker(PLot=False, flow_type="opencv_flow")
 
-    # process_flo_dataset(flow_type="opencv_flow", data_dir=augment_save_dir)
-    # process_pkldataset_maker()
-    from src.utils import show_video_line
-    import pickle
+    # # process_flo_dataset(flow_type="opencv_flow", data_dir=augment_save_dir)
+    # # splits = process_pkldataset_maker()
+    # from src.utils import show_video_line
+    # import pickle
 
-    # load the dataset
-    split = "OhbVrpoi_trian_256_interval-19_pre_slen-6"
-    with open('data\OhbVrpoi_trian_256_interval-19_pre_slen-6_cloud.pkl', 'rb') as f:
-        dataset = pickle.load(f)
+    # splits = ["OhbVrpoi_trian_256_interval-19_pre_slen-6"]
+    # # load the dataset
+    # split = splits[0]
+    # pkl_fp = f"data/{split}_cloud.pkl"
+    # with open(pkl_fp, 'rb') as f:
+    #     dataset = pickle.load(f)
 
-    train_x, train_y = dataset[f'X_{split}'], dataset[f'Y_{split}']
+    # train_x, train_y = dataset[f'X_{split}'], dataset[f'Y_{split}']
+    # train_x, train_y = train_x/255., train_y/255.
+    # print(train_x.shape)
+    # # the shape is B x T x C x H x W
+    # # B: the number of samples
+    # # T: the number of frames in each sample
+    # # C, H, W: the height, width, channel of each frame
 
-    train_x, train_y =  train_x/255., train_y/255.
-    print(train_x.shape)
-    # the shape is B x T x C x H x W
-    # B: the number of samples
-    # T: the number of frames in each sample
-    # C, H, W: the height, width, channel of each frame
-
-    # show the given frames from an example
-    example_idx = 0
-    show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path=None, format='png', use_rgb=True)
+    # # show the given frames from an example
+    # example_idx = 0
+    # show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path="data/compare.png", format='png', use_rgb=True)

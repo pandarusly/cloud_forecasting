@@ -1,115 +1,186 @@
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
+import einops
+from src.models.components.layers import ConvLSTMCell
+
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
+    elif classname.find('Norm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
-# https://github.com/ndrplz/ConvLSTM_pytorch
+def schedule_sampling(eta, itr, batch_size, args):
+    T, img_channel, img_height, img_width = args.in_shape
+    zeros = np.zeros((batch_size,
+                      args.aft_seq_length - 1,
+                      img_height // args.patch_size,
+                      img_width // args.patch_size,
+                      args.patch_size ** 2 * img_channel))
+    if not args.scheduled_sampling:
+        return 0.0, zeros
 
-class ConvLSTMCell(nn.Module):
-    def __init__(self, input_channels, hidden_channels, kernel_size):
-        super(ConvLSTMCell, self).__init__()
+    if itr < args.sampling_stop_iter:
+        eta -= args.sampling_changing_rate
+    else:
+        eta = 0.0
+    random_flip = np.random.random_sample(
+        (batch_size, args.aft_seq_length - 1))
+    true_token = (random_flip < eta)
+    ones = np.ones((img_height // args.patch_size,
+                    img_width // args.patch_size,
+                    args.patch_size ** 2 * img_channel))
+    zeros = np.zeros((img_height // args.patch_size,
+                      img_width // args.patch_size,
+                      args.patch_size ** 2 * img_channel))
+    real_input_flag = []
+    for i in range(batch_size):
+        for j in range(args.aft_seq_length - 1):
+            if true_token[i, j]:
+                real_input_flag.append(ones)
+            else:
+                real_input_flag.append(zeros)
+    real_input_flag = np.array(real_input_flag)
+    real_input_flag = np.reshape(real_input_flag,
+                                 (batch_size,
+                                  args.aft_seq_length - 1,
+                                  img_height // args.patch_size,
+                                  img_width // args.patch_size,
+                                  args.patch_size ** 2 * img_channel))
+    
+    real_input_flag = torch.FloatTensor(real_input_flag).permute(0,1,4,2,3).contiguous()# b t c h w
+    return eta, real_input_flag
 
-        assert hidden_channels % 2 == 0
-
-        self.input_channels = input_channels
-        self.hidden_channels = hidden_channels
-        self.kernel_size = kernel_size
-        self.num_features = 4
-
-        self.padding = int((kernel_size - 1) / 2)
-
-        self.Wxi = nn.Conv2d(self.input_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=True)
-        self.Whi = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=False)
-        self.Wxf = nn.Conv2d(self.input_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=True)
-        self.Whf = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=False)
-        self.Wxc = nn.Conv2d(self.input_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=True)
-        self.Whc = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=False)
-        self.Wxo = nn.Conv2d(self.input_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=True)
-        self.Who = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, 1, self.padding, bias=False)
-
-        self.Wci = None
-        self.Wcf = None
-        self.Wco = None
-
-    def forward(self, x, h, c):
-        ci = torch.sigmoid(self.Wxi(x) + self.Whi(h) + c * self.Wci)
-        cf = torch.sigmoid(self.Wxf(x) + self.Whf(h) + c * self.Wcf)
-        cc = cf * c + ci * torch.tanh(self.Wxc(x) + self.Whc(h))
-        co = torch.sigmoid(self.Wxo(x) + self.Who(h) + cc * self.Wco)
-        ch = co * torch.tanh(cc)
-        return ch, cc
-
-    def init_hidden(self, batch_size, hidden, shape):
-        if self.Wci is None:
-            self.Wci = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1])).cuda()
-            self.Wcf = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1])).cuda()
-            self.Wco = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1])).cuda()
-        else:
-            assert shape[0] == self.Wci.size()[2], 'Input Height Mismatched!'
-            assert shape[1] == self.Wci.size()[3], 'Input Width Mismatched!'
-        return (Variable(torch.zeros(batch_size, hidden, shape[0], shape[1])).cuda(),
-                Variable(torch.zeros(batch_size, hidden, shape[0], shape[1])).cuda())
+def reshape_patch(img_tensor, patch_size):
+    assert 5 == img_tensor.ndim
+    batch_size, seq_length, num_channels, img_height, img_width = img_tensor.shape
+    patch_tensor = einops.rearrange(img_tensor, 'b s c (h p1) (w p2) -> b s (p1 p2 c)  h w', p1=patch_size, p2=patch_size)
+    return patch_tensor
 
 
-class ConvLSTM(nn.Module):
-    # input_channels corresponds to the first input feature map
-    # hidden state is a list of succeeding lstm layers.
-    def __init__(self, input_channels, hidden_channels, kernel_size, step=1, effective_step=[1]):
-        super(ConvLSTM, self).__init__()
-        self.input_channels = [input_channels] + hidden_channels
-        self.hidden_channels = hidden_channels
-        self.kernel_size = kernel_size
-        self.num_layers = len(hidden_channels)
-        self.step = step
-        self.effective_step = effective_step
-        self._all_layers = []
+def reshape_patch_back(patch_tensor, patch_size):
+    batch_size, seq_length, channels ,  patch_height, patch_width= patch_tensor.shape
+    img_channels = channels // (patch_size * patch_size)
+    img_tensor = einops.rearrange(patch_tensor, 'b s (p1 p2 c) h w-> b s c (h p1) (w p2) ', p1=patch_size, p2=patch_size)
+    return img_tensor
+
+
+class ConvLSTM_Model(nn.Module):
+    r"""ConvLSTM Model
+
+    Implementation of `Convolutional LSTM Network: A Machine Learning Approach
+    for Precipitation Nowcasting <https://arxiv.org/abs/1506.04214>`_.
+
+    """
+    # reverse_scheduled_sampling = 0
+
+    def __init__(self, num_layers, num_hidden, configs, **kwargs):
+        super(ConvLSTM_Model, self).__init__()
+        T, C, H, W = configs.in_shape
+
+        self.configs = configs
+        self.frame_channel = configs.patch_size * configs.patch_size * C
+        self.num_layers = num_layers
+        self.num_hidden = num_hidden
+        cell_list = []
+
+        height = H // configs.patch_size
+        width = W // configs.patch_size
+        self.MSE_criterion = nn.MSELoss()
+
+        for i in range(num_layers):
+            in_channel = self.frame_channel if i == 0 else num_hidden[i - 1]
+            cell_list.append(
+                ConvLSTMCell(in_channel, num_hidden[i], height, width, configs.filter_size,
+                                       configs.stride, configs.layer_norm)
+            )
+        self.cell_list = nn.ModuleList(cell_list)
+        self.conv_last = nn.Conv2d(num_hidden[num_layers - 1], self.frame_channel,
+                                   kernel_size=1, stride=1, padding=0, bias=False)
+
+    def forward(self, frames, mask_true, **kwargs):
+        
+        frames = reshape_patch(frames, self.configs.patch_size)
+        batch = frames.shape[0]
+        height = frames.shape[3]
+        width = frames.shape[4]
+
+        next_frames = []
+        h_t = []
+        c_t = []
+
         for i in range(self.num_layers):
-            name = 'cell{}'.format(i)
-            cell = ConvLSTMCell(self.input_channels[i], self.hidden_channels[i], self.kernel_size)
-            setattr(self, name, cell)
-            self._all_layers.append(cell)
+            zeros = torch.zeros([batch, self.num_hidden[i], height, width]).to(frames.device)
+            h_t.append(zeros)
+            c_t.append(zeros)
 
-    def forward(self, input):
-        internal_state = []
-        outputs = []
-        for step in range(self.step):
-            x = input
-            for i in range(self.num_layers):
-                # all cells are initialized in the first step
-                name = 'cell{}'.format(i)
-                if step == 0:
-                    bsize, _, height, width = x.size()
-                    (h, c) = getattr(self, name).init_hidden(batch_size=bsize, hidden=self.hidden_channels[i],
-                                                             shape=(height, width))
-                    internal_state.append((h, c))
+        for t in range(self.configs.pre_seq_length + self.configs.aft_seq_length - 1):
+            # reverse schedule sampling for predrnn v2
+            # if self.configs.reverse_scheduled_sampling == 1:
+            #     if t == 0:
+            #         net = frames[:, t]
+            #     else:
+            #         net = mask_true[:, t - 1] * frames[:, t] + (1 - mask_true[:, t - 1]) * x_gen
+            #         # bchw = bchw * bchw + bchw * bchw
+            # else:
+            if t < self.configs.pre_seq_length:
+                net = frames[:, t]
+            else:
+                net = mask_true[:, t - self.configs.pre_seq_length] * frames[:, t] + \
+                        (1 - mask_true[:, t - self.configs.pre_seq_length]) * x_gen
 
-                # do forward
-                (h, c) = internal_state[i]
-                x, new_c = getattr(self, name)(x, h, c)
-                internal_state[i] = (x, new_c)
-            # only record effective steps
-            if step in self.effective_step:
-                outputs.append(x)
+            h_t[0], c_t[0] = self.cell_list[0](net, h_t[0], c_t[0])
 
-        return outputs, (x, new_c)
+            for i in range(1, self.num_layers):
+                h_t[i], c_t[i] = self.cell_list[i](h_t[i - 1], h_t[i], c_t[i])
+
+            x_gen = self.conv_last(h_t[self.num_layers - 1])
+            next_frames.append(x_gen)
+
+        # [length, batch, channel, height, width]
+        next_frames = torch.stack(next_frames, dim=0).permute(1, 0,2, 3, 4).contiguous()
+        # if kwargs.get('return_loss', True):
+        #     loss = self.MSE_criterion(next_frames, frames_tensor[:, 1:])
+        # else:
+        #     loss = None
+        next_frames = reshape_patch_back(next_frames, self.configs.patch_size)
+        return next_frames
 
 
 if __name__ == '__main__':
-    # gradient check
-    convlstm = ConvLSTM(input_channels=512, hidden_channels=[128, 64, 64, 32, 32], kernel_size=3, step=5,
-                        effective_step=[4]).cuda()
-    loss_fn = torch.nn.MSELoss()
+    from omegaconf import OmegaConf
 
-    input = Variable(torch.randn(1, 512, 64, 32)).cuda()
-    target = Variable(torch.randn(1, 32, 64, 32)).double().cuda()
-
-    output = convlstm(input)
-    output = output[0][0].double()
-    res = torch.autograd.gradcheck(loss_fn, (output, target), eps=1e-6, raise_exception=True)
-    print(res)
+    # -----------model settings -----------
+    configs = OmegaConf.structured(
+        {
+            "in_shape": (19,3,128,128),
+            "patch_size": 1,
+            "pre_seq_length": 7,
+            "aft_seq_length": 12,
+            "filter_size": 5,
+            "stride": 1,
+            "layer_norm": 0,
+            # scheduled sampling
+            "scheduled_sampling": 1,
+            "scheduled_sampling" : 1,
+            "sampling_stop_iter" : 50000,
+            "sampling_start_value" : 1.0,
+            "sampling_changing_rate" : 0.00002,
+        }
+    )
+    num_hidden = [128,128,128,128]
+    num_layers = len(num_hidden)
+    # num_layers, num_hidden, configs, **kwargs
+    convlstm = ConvLSTM_Model(num_layers, num_hidden, configs,).cuda()
+    # ----------forward settings ----------
+    batch_x, batch_y = torch.randn(1, 7,3, 128, 128).cuda(), torch.randn(1, 12,3,128, 128).cuda()
+    # TOTO: finish function : reshape_patch with einops
+    eta = 1.0  # PredRNN variants
+    num_updates= 0 # step number: initial num_updates = self._epoch * self.steps_per_epoch == 0 * steps_per_epoch
+    ims = torch.cat([batch_x, batch_y], dim=1)
+    eta, real_input_flag = schedule_sampling(
+                    eta, num_updates, ims.shape[0], configs)
+    img_gen = convlstm(ims.cuda(), real_input_flag.cuda())
+    print(img_gen.shape)

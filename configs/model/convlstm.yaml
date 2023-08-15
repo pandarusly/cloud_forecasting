@@ -1,0 +1,25 @@
+hparams:
+  TRAIN:
+    EPOCHS: 300 #${trainer.max_steps}
+    INTERVAL: epoch #step #epoch
+    MONITOR: val/F1_1 #'val/.F1_1'
+    WARMUP_EPOCHS: 0
+    BASE_LR: 0.0003
+    T_IN_EPOCHS: true
+    WARMUP_LR: 1.0e-07
+    MIN_LR: 1.0e-07 # 6e-5
+    WEIGHT_DECAY: 0.001
+    OPTIMIZER:
+      NAME: admw #sgd
+      MOMENTUM: 0.9
+      EPS: 1.0e-08
+      BETAS:
+      - 0.9
+      - 0.999
+    LR_SCHEDULER:
+      NAME: linear #on_plateau #linear
+      DECAY_RATE: 0.1
+      DECAY_EPOCHS: 6
+      MODE: max
+      PATIENCE: 10
+      GAMMA: 0.5 #0.9 #0.3 #0.999

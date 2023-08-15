@@ -24,6 +24,8 @@ from src.data.components.flow_utils import (
 )
 
 random.seed(42)
+
+
 def get_time(parameter="total"):
     def deco_func(f):
         def wrapper(*arg, **kwarg):
@@ -80,7 +82,8 @@ def get_strdatetime_filename_mapping_and_list(directory_path):
             time = match.group(2)
             strdatetime_list.append(croped_preffix + "_" + date + time)
             datatimes_nums.add(date + time)
-            datetime_filename_mapping[croped_preffix + "_" + date + time] = filename
+            datetime_filename_mapping[croped_preffix +
+                                      "_" + date + time] = filename
     croped_region_nums = len(list(croped_region_nums))
     datatimes_nums = len(list(datatimes_nums))
 
@@ -161,10 +164,9 @@ def make_dataset_json(
         )
         if len(subsequent_intervals) == Intinterval:
             datasets.append(subsequent_intervals)
-    
 
     if split_path:
-        json_path =split_path 
+        json_path = split_path
         # json_path = (
         #     f"data/dataset_step_{step}_interval_{Intinterval}.json"
         #     if split_path is None
@@ -181,7 +183,11 @@ def make_dataset_json(
 
 
 def generate_random_string(length):
-    return "".join(random.choice(string.ascii_letters) for _ in range(length))
+    return str(datetime.now().hour) + \
+        str(datetime.now().minute)+str(datetime.now().second) +\
+        "".join(random.choice(string.ascii_letters) for _ in range(length))
+
+    # return
 
 
 # TODO:fixed tar -czvf x.tar.gz  x --- 使用了gzip进行了有损压缩。会影响JPG的质量。
@@ -208,16 +214,18 @@ class BaseCloudRGBSequenceDataset(Dataset):
         self.crop_size = crop_size
 
         if not os.path.exists(split_path):
-            
+
             self.image_list = sorted(self._make_dataset_json(
                 Intinterval=Intinterval, step=step, split_path=split_path
             ))
-            print(f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
+            print(
+                f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
         else:
             with open(self.split_path, "r") as json_file:
                 data = json.load(json_file)
             self.image_list = sorted(data)
-            print(f"load samples from {split_path}, got {len(self.image_list)} samples")
+            print(
+                f"load samples from {split_path}, got {len(self.image_list)} samples")
 
         if get_optical_flow == "opencv_flow":
             self.use_optical_flow = True
@@ -232,7 +240,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
                     iaa.CropToFixedSize(
                         width=self.crop_size[0], height=self.crop_size[1]
                     ),  # 裁剪到1024
-                    # # 选择2到4种方法做变换
+                    # 选择2到4种方法做变换
                     # iaa.SomeOf(
                     #     (2, 4),
                     #     [
@@ -421,7 +429,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
                 )
                 save_image_with_pil(image_np, output_path)
 
-    def make_pkldataset(self, data_list, out_dir ,pre_slen=10, aft_slen=10,split="train"):
+    def make_pkldataset(self, data_list, out_dir, pre_slen=10, aft_slen=10, split="train"):
         """ make vedios pkl for more speed reading.
 
         Args:
@@ -430,31 +438,29 @@ class BaseCloudRGBSequenceDataset(Dataset):
             random_string (str): _description_
         Returns:
             Vedios (dict): B T C H W: x_region_filename, y_region_filename
-        """ 
- 
+        """
+
         videos = []
         dataset = {}
         for data in data_list:
             # vedio, _ = data["images"].numpy(), data["filenames"]
-            vedio = data["images"].numpy() 
-           
+            vedio = data["images"].numpy()
+
             videos.append(vedio)
         # stack video frames from each folder
-        data = np.stack(videos)   # btchw 
+        data = np.stack(videos)   # btchw
         data_x, data_y = data[:, :pre_slen], data[:, pre_slen:]
         # if the data is in [0, 255], rescale it into [0, 1]
         if data.max() > 1.0:
             data = data.astype(np.float32) / 255.0
-        dataset['X_' + split], dataset['Y_' + split] = data_x, data_y 
+        dataset['X_' + split], dataset['Y_' + split] = data_x, data_y
 
         # save as a pkl file
-        out_file = os.path.join(out_dir,f"{split}_cloud.pkl")
+        out_file = os.path.join(out_dir, f"{split}_cloud.pkl")
         with open(out_file, 'wb') as f:
             pickle.dump(dataset, f)
 
         return out_file
-
-
 
 
 #  opencv is slower than pil
@@ -507,24 +513,20 @@ class CloudFlowSequenceDataset(BaseCloudRGBSequenceDataset):
         return data
 
 
-def process_dataset_maker(PLot=False, flow_type="opencv_flow", data_dir=None):
+def process_dataset_maker(PLot=False, flow_type="opencv_flow"):
     random.seed(42)
-    step = 19
+    step = 1  # TODO: this step should be equal to interval , otherwise will have same name
     Intinterval = 19
     crop_size = (256, 256)
-    crop_times = 1
-    split_path = f"data/demo_dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/DLDATA/H8JPEG_valid" if not data_dir else data_dir
-    # PLot = False
-    # flow_type = "opencv_flow"  # opencv_flow pyflow none
+    crop_times = 4
+    split_path = f"data/crop_dataset_step_{step}_interval_{Intinterval}.json"
+    data_dir = "data/DLDATA/H8JPEG_valid"
+
     augment_save_dir = (
-        "data/DLDATA/Demo_H8JPEG_valid_aug_Intinterval-{}_flow_type-{}_PLot{}".format(
+        "data/CLip_H8-{}_flow_type-{}_PLot{}".format(
             Intinterval, flow_type, PLot
         )
     )
-
-    # data_dir = augment_save_dir
-    # augment_save_dir = f"data/DLDATA/H8JPEG_valid_aug_{crop_size[0]}"
 
     dataset = BaseCloudRGBSequenceDataset(
         data_dir=data_dir,
@@ -536,26 +538,23 @@ def process_dataset_maker(PLot=False, flow_type="opencv_flow", data_dir=None):
         crop_size=crop_size,
     )
 
-    for _ in tqdm(range(crop_times), position=1, colour="red"):
-        random_string = generate_random_string(8)
-        for i in tqdm(
-            range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
-        ):
-            data = dataset[i]
+    # for _ in tqdm(range(crop_times), position=1, colour="red"):
+    #     random_string = generate_random_string(8)
+    #     for i in tqdm(
+    #         range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
+    #     ):
+    #         data = dataset[i]
 
-            if PLot:
-                dataset.plot_frames(data, out_directory=augment_save_dir)
-            else:
-                dataset.make_dataset(
-                    data,
-                    out_directory=augment_save_dir,
-                    random_string=random_string,
-                )
+    #         if PLot:
+    #             dataset.plot_frames(data, out_directory=augment_save_dir)
+    #         else:
+    #             dataset.make_dataset(
+    #                 data,
+    #                 out_directory=augment_save_dir,
+    #                 random_string=random_string,
+    #             )
 
-            # if i == 0:  # only test croped image at six loops.
-            #     break
-
-    return augment_save_dir
+    # return augment_save_dir
 
 
 def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
@@ -599,7 +598,8 @@ def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
             flow = arrays_sequence[t]
             # 外推图像坐标
             x_coords, y_coords = np.meshgrid(
-                np.arange(initial_image.shape[1]), np.arange(initial_image.shape[0])
+                np.arange(initial_image.shape[1]), np.arange(
+                    initial_image.shape[0])
             )
             x_coords_ext = x_coords + t * flow[:, :, 0]
             y_coords_ext = y_coords + t * flow[:, :, 1]
@@ -612,22 +612,23 @@ def process_flo_dataset(flow_type="opencv_flow", data_dir=None):
             )
 
             cv2.imwrite(
-                "data/reconstructed_image_{}.jpg".format(t), reconstructed_image
+                "data/reconstructed_image_{}.jpg".format(
+                    t), reconstructed_image
             )
 
 
-def process_pkldataset_maker(data_dir=None,save_dir="data",plot=True):
+def process_pkldataset_maker(save_dir="data", plot=True):
     random.seed(42)
     step = 19
     Intinterval = 19
     crop_size = (256, 256)
     crop_times = 1
-    split_path = f"data/dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/DLDATA/H8JPEG_valid" if not data_dir else data_dir
-    flow_type="none"
-    
+
+    split_path = f"data/demo_dataset_step_{step}_interval_{Intinterval}.json"
+    flow_type = "none"
+
     dataset = BaseCloudRGBSequenceDataset(
-        data_dir=data_dir,
+        data_dir="data/DLDATA/H8JPEG_valid",
         use_transform=True,
         get_optical_flow=flow_type,
         split_path=split_path,
@@ -636,34 +637,104 @@ def process_pkldataset_maker(data_dir=None,save_dir="data",plot=True):
         crop_size=crop_size,
     )
 
-    pre_slen=6
-    
-    splits=[]
+    pre_slen = 6
+
+    splits = []
     for _ in tqdm(range(crop_times), position=1, colour="red"):
         random_string = generate_random_string(8)
         vedios = []
         for i in tqdm(
             range(len(dataset)), position=2, colour="blue", desc="dataset making!!!"
         ):
-            if plot: # TODO: plot frame sequence is not match .pkl store sequene
-                dataset.plot_frames(dataset[i], out_directory=f"{save_dir}/pkl_images")
+            if plot:  # TODO: plot frame sequence is not match .pkl store sequene
+                dataset.plot_frames(
+                    dataset[i], out_directory=f"{save_dir}/pkl_images")
             vedios.append(dataset[i])
         dataset.make_pkldataset(
-            vedios,save_dir,pre_slen=pre_slen,split=f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}"
+            vedios, save_dir, pre_slen=pre_slen, split=f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}"
         )
-        splits.append(f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}")
+        splits.append(
+            f"{random_string}_trian_{crop_size[0]}_interval-{Intinterval}_pre_slen-{pre_slen}")
 
-    return splits   
- 
+    return splits
+
+
+def tranvaltest_json_split():
+    random.seed(42)
+    step = 19
+    Intinterval = 19
+    crop_size = (256, 256)
+
+    split_path = f"data/total_dataset_step_{step}_interval_{Intinterval}.json"
+    data_dir = "data/DLDATA/H8JPEG_valid"
+
+    dataset = BaseCloudRGBSequenceDataset(
+        data_dir=data_dir,
+        use_transform=True,
+        get_optical_flow="none",
+        split_path=split_path,
+        step=step,
+        Intinterval=Intinterval,
+        crop_size=crop_size,
+    )
+
+    with open(split_path, "r") as json_file:
+        data = json.load(json_file)
+        image_list = sorted(data)
+
+    length = len(image_list)
+    val_length = int(0.8*length)
+    print(f"共有 {length} 组不重叠的时间序列")
+    train_images = image_list[:val_length]
+    val_images = image_list[val_length:]
+
+    print(
+        f"training time series length is {len(train_images)}\n",
+        f"validate time series length is {len(val_images)} \n"
+    )
+    with open(split_path.replace(".json", "_train.json"), "w") as f:
+        f.write(json.dumps(train_images))
+    with open(split_path.replace(".json", "_val.json"), "w") as f:
+        f.write(json.dumps(val_images))
+
+    val_dataset = BaseCloudRGBSequenceDataset(
+        data_dir=data_dir,
+        use_transform=True,
+        get_optical_flow="none",
+        split_path=split_path.replace(".json", "_val.json"),
+        step=step,
+        Intinterval=Intinterval,
+        crop_size=crop_size,
+    )
+
+    PLot = False
+    augment_save_dir = "data/validate_croped"
+    crop_times = 8
+    for _ in tqdm(range(crop_times), position=1, colour="red"):
+        random_string = generate_random_string(8)
+        for i in tqdm(
+            range(len(val_dataset)), position=2, colour="blue", desc="dataset making!!!"
+        ):
+            data = val_dataset[i]
+            if PLot:
+                val_dataset.plot_frames(data, out_directory=augment_save_dir)
+            else:
+                val_dataset.make_dataset(
+                    data,
+                    out_directory=augment_save_dir,
+                    random_string=random_string,
+                )
+
+
 # ----------------------------------------------------------------
 # ls -l data/DLDATA/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
     # process_dataset_maker(PLot=True, flow_type="opencv_flow")
-    augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
+    # augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
     # augment_save_dir = process_dataset_maker(PLot=False, flow_type="opencv_flow")
 
     # # process_flo_dataset(flow_type="opencv_flow", data_dir=augment_save_dir)
-    # # splits = process_pkldataset_maker()
+    # splits = process_pkldataset_maker()
     # from src.utils import show_video_line
     # import pickle
 
@@ -685,3 +756,5 @@ if __name__ == "__main__":
     # # show the given frames from an example
     # example_idx = 0
     # show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path="data/compare.png", format='png', use_rgb=True)
+
+    tranvaltest_json_split()

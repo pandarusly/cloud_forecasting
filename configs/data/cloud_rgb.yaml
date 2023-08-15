@@ -1,0 +1,28 @@
+
+train_dir: data/data_cloud/H8JPEG_valid
+val_dir: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8JPEG_valid
+train_config: 
+  data_dir: ${train_dir}
+  use_transform: True
+  get_optical_flow: null
+  split_path: null
+  step: 1
+  Intinterval: 19
+  crop_size: [256, 256]
+
+val_config: 
+  data_dir: ${val_dir}
+  use_transform: False
+  get_optical_flow: null
+  split_path: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8Data/total_dataset_step_19_interval_19_val.json
+
+test_config: 
+  data_dir: ${val_dir}
+  use_transform: False
+  get_optical_flow: null
+  split_path: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8Data/total_dataset_step_19_interval_19_val.json
+
+batch_size:  2
+batch_size_val:  1
+num_workers:  0
+pin_memory:  False

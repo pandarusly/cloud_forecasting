@@ -73,20 +73,20 @@ class RNNModule(LightningModule, ABC):
 
     def RNN_test_step(self, batch, step_name: str):
         logs = {}
-        batch_x, batch_y = batch
-
-        ims = torch.cat([batch_x, batch_y], dim=1)
+        ims = batch["images"]
+        # batch_x, batch_y = batch
+        # ims = torch.cat([batch_x, batch_y], dim=1)
 
         mask_input = self.model.configs.pre_seq_length
 
         _, img_channel, img_height, img_width = self.model.configs.in_shape
 
         real_input_flag = torch.zeros(
-            (batch_x.shape[0],
+            (ims.shape[0],
              self.model.configs.total_length - mask_input - 1,
              self.model.configs.patch_size ** 2 * img_channel,
              img_height // self.model.configs.patch_size,
-             img_width // self.model.configs.patch_size)).to(batch_x.device)
+             img_width // self.model.configs.patch_size)).to(ims.device)
 
         img_gen = self.forward(frames=ims, mask_true=real_input_flag)
         loss = self.loss(img_gen, ims[:, 1:])
@@ -96,13 +96,14 @@ class RNNModule(LightningModule, ABC):
 
     def RNN_train_step(self, batch, eta=1.0, num_updates=0):
         logs = {}
+        ims = batch["images"]
         # step number: initial num_updates = self._epoch * self.steps_per_epoch == 0 *
         # eta = 1.0  # PredRNN variants
         # batch_x, batch_y = torch.randn(1, 7, 3, 128, 128).cuda(
         # ), torch.randn(1, 12, 3, 128, 128).cuda()
-        batch_x, batch_y = batch
-
-        ims = torch.cat([batch_x, batch_y], dim=1)
+        # filenames=  batch["filenames"]
+        # batch_x, batch_y = batch
+        # ims = torch.cat([batch_x, batch_y], dim=1)
         eta, real_input_flag = schedule_sampling(
             eta, num_updates, ims.shape[0], self.model.configs)
         real_input_flag = real_input_flag.to(batch_x.device)
@@ -170,11 +171,16 @@ if __name__ == "__main__":
     # # ----------forward settings ----------
     batch_x, batch_y = torch.randn(
         1, configs.pre_seq_length, 3, configs.in_shape[-1], configs.in_shape[-1]), torch.randn(1, configs.aft_seq_length, 3, configs.in_shape[-1], configs.in_shape[-1])
+    batch = (batch_x, batch_y)
+    batch = dict(
+        images=torch.randn(1, configs.total_length, 3,
+                           configs.in_shape[-1], configs.in_shape[-1])
+    )
 
-    loss = task.training_step((batch_x, batch_y), 0)
+    loss = task.training_step(batch, 0)
     print(f"train loss {loss}")
-    task.validation_step((batch_x, batch_y), 0)
-    task.test_step((batch_x, batch_y), 0)
+    task.validation_step(batch, 0)
+    task.test_step(batch, 0)
 
     # # TOTO: finish function : reshape_patch with einops
     # eta = 1.0  # PredRNN variants

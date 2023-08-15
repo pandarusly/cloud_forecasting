@@ -173,12 +173,19 @@ def make_dataset_json(
         #     else split_path
         # )
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
-
         print(
             f"only {time_seris_num} time series is generated wihch has {croped_region_nums} regions ,and {len(datasets)} time series is valid , length is {len(datasets[0])} "
         )
         with open(json_path, "w") as f:
             f.write(json.dumps(datasets))
+    else:
+        json_path = "data/temp.json"
+        print(
+            f"only {time_seris_num} time series is generated wihch has {croped_region_nums} regions ,and {len(datasets)} time series is valid , length is {len(datasets[0])} , information saved in {json_path}"
+        )
+        with open(json_path, "w") as f:
+            f.write(json.dumps(datasets))
+
     return datasets
 
 
@@ -202,6 +209,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
         step=1,
         input_frames_num=6,
         crop_size=(1024, 1024),
+        div_255=True,
     ):
         if not os.path.exists(data_dir):
             raise FileExistsError(f"data_dir {data_dir} is not exist")
@@ -212,20 +220,26 @@ class BaseCloudRGBSequenceDataset(Dataset):
         self.use_optical_flow = False
         self.split_path = split_path
         self.crop_size = crop_size
+        self.div_255 = div_255
 
-        if not os.path.exists(split_path):
-
-            self.image_list = sorted(self._make_dataset_json(
-                Intinterval=Intinterval, step=step, split_path=split_path
-            ))
-            print(
-                f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
-        else:
+        if split_path is not None and os.path.exists(split_path):
             with open(self.split_path, "r") as json_file:
                 data = json.load(json_file)
             self.image_list = sorted(data)
             print(
                 f"load samples from {split_path}, got {len(self.image_list)} samples")
+        elif split_path is not None and not os.path.exists(split_path):
+            self.image_list = sorted(self._make_dataset_json(
+                Intinterval=Intinterval, step=step, split_path=split_path
+            ))
+            print(
+                f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
+        elif split_path is None:
+            self.image_list = sorted(self._make_dataset_json(
+                Intinterval=Intinterval, step=step, split_path=split_path
+            ))
+            print(
+                f"split_path is not specified, reading from {self.data_dir}, got {len(self.image_list)} samples")
 
         if get_optical_flow == "opencv_flow":
             self.use_optical_flow = True
@@ -241,59 +255,59 @@ class BaseCloudRGBSequenceDataset(Dataset):
                         width=self.crop_size[0], height=self.crop_size[1]
                     ),  # 裁剪到1024
                     # 选择2到4种方法做变换
-                    # iaa.SomeOf(
-                    #     (2, 4),
-                    #     [
-                    #         iaa.Fliplr(0.5),  # 对50%的图片进行水平镜像翻转
-                    #         iaa.Flipud(0.5),  # 对50%的图片进行垂直镜像翻转
-                    #         # iaa.OneOf(
-                    #         #     [
-                    #         #         iaa.Affine(rotate=(-10, 10), scale=(1.1, 1.2)),
-                    #         #         iaa.Affine(
-                    #         #             translate_px={
-                    #         #                 "x": (-10, 10),
-                    #         #                 "y": (-7, -13),
-                    #         #             },
-                    #         #             scale=(1.1),
-                    #         #         ),
-                    #         #     ]
-                    #         # ),
-                    #         # Blur each image with varying strength using
-                    #         # gaussian blur,
-                    #         # average/uniform blur,
-                    #         # median blur .
-                    #         # iaa.OneOf(
-                    #         #     [
-                    #         #         iaa.GaussianBlur((0.2, 0.7)),
-                    #         #         iaa.AverageBlur(k=(1, 3)),
-                    #         #         iaa.MedianBlur(k=(1, 3)),
-                    #         #     ]
-                    #         # ),
-                    #         # Sharpen each image, overlay the result with the original
-                    #         # iaa.Sharpen(alpha=1.0, lightness=(0.7, 1.3)),
-                    #         # Same as sharpen, but for an embossing effect.
-                    #         # iaa.Emboss(alpha=(0, 0.3), strength=(0, 1)),
-                    #         # 添加高斯噪声
-                    #         # iaa.AdditiveGaussianNoise(
-                    #         #     loc=0, scale=(0.01 * 255, 0.05 * 255)
-                    #         # ),
-                    #         # iaa.Grayscale((0.2, 0.7)),
-                    #         # # iaa.Invert(0.05, per_channel=True),  # invert color channels
-                    #         # # Add a value of -10 to 10 to each pixel.
-                    #         # iaa.Add((-10, 10), per_channel=0.5),
-                    #         # iaa.OneOf(
-                    #         #     [
-                    #         #         iaa.AddElementwise((-20, 20)),
-                    #         #         iaa.MultiplyElementwise((0.8, 1.2)),
-                    #         #         iaa.Multiply((0.7, 1.3)),
-                    #         #     ]
-                    #         # ),
-                    #         # Improve or worsen the contrast of images.
-                    #         # iaa.ContrastNormalization((0.7, 1.3)),
-                    #     ],
-                    #     # do all of the above augmentations in random order
-                    #     random_order=True,
-                    # ),
+                    iaa.SomeOf(
+                        (1, 4),
+                        [
+                            iaa.Fliplr(0.5),  # 对50%的图片进行水平镜像翻转
+                            iaa.Flipud(0.5),  # 对50%的图片进行垂直镜像翻转
+                            # iaa.OneOf(
+                            #     [
+                            #         iaa.Affine(rotate=(-10, 10), scale=(1.1, 1.2)),
+                            #         iaa.Affine(
+                            #             translate_px={
+                            #                 "x": (-10, 10),
+                            #                 "y": (-7, -13),
+                            #             },
+                            #             scale=(1.1),
+                            #         ),
+                            #     ]
+                            # ),
+                            # Blur each image with varying strength using
+                            # gaussian blur,
+                            # average/uniform blur,
+                            # median blur .
+                            # iaa.OneOf(
+                            #     [
+                            #         iaa.GaussianBlur((0.2, 0.7)),
+                            #         iaa.AverageBlur(k=(1, 3)),
+                            #         iaa.MedianBlur(k=(1, 3)),
+                            #     ]
+                            # ),
+                            # Sharpen each image, overlay the result with the original
+                            # iaa.Sharpen(alpha=1.0, lightness=(0.7, 1.3)),
+                            # Same as sharpen, but for an embossing effect.
+                            # iaa.Emboss(alpha=(0, 0.3), strength=(0, 1)),
+                            # 添加高斯噪声
+                            # iaa.AdditiveGaussianNoise(
+                            #     loc=0, scale=(0.01 * 255, 0.05 * 255)
+                            # ),
+                            # iaa.Grayscale((0.2, 0.7)),
+                            # # iaa.Invert(0.05, per_channel=True),  # invert color channels
+                            # # Add a value of -10 to 10 to each pixel.
+                            # iaa.Add((-10, 10), per_channel=0.5),
+                            # iaa.OneOf(
+                            #     [
+                            #         iaa.AddElementwise((-20, 20)),
+                            #         iaa.MultiplyElementwise((0.8, 1.2)),
+                            #         iaa.Multiply((0.7, 1.3)),
+                            #     ]
+                            # ),
+                            # Improve or worsen the contrast of images.
+                            # iaa.ContrastNormalization((0.7, 1.3)),
+                        ],
+                        # do all of the above augmentations in random order
+                        random_order=True,
+                    ),
                 ],
                 random_order=True,
             )
@@ -332,7 +346,8 @@ class BaseCloudRGBSequenceDataset(Dataset):
         frames = torch.tensor(frames, dtype=torch.float32).permute(
             0, 3, 1, 2
         )  # t h w c -> t c h w
-
+        if self.div_255:
+            frames = frames/255.
         data = dict(images=frames, filenames=filenames)
         return data
 

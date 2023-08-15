@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: mnist
+  - override /data: cloud_rgb
   - override /model: mnist
   - override /callbacks: default
   - override /trainer: default

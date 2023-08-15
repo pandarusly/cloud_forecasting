@@ -1,8 +1,35 @@
+_target_: src.models.rnn.RNNModule
+
+
+net:
+  _target_: src.models.components.conv_lstm.ConvLSTM_Model
+  num_layers: 4
+  num_hidden: [128, 128, 128, 128]
+  configs:
+    in_shape: [19, 3, 256, 256]
+    patch_size: 1
+    pre_seq_length: 7
+    aft_seq_length: 12
+    total_length: 19
+    filter_size: 5
+    stride: 1
+    layer_norm: 0
+    # scheduled sampling
+    scheduled_sampling: 1
+    sampling_stop_iter: 50000
+    sampling_start_value: 1.0
+    sampling_changing_rate: 0.00002
+
+
+loss:
+  _target_: torch.nn.MSELoss
+
+
 hparams:
   TRAIN:
     EPOCHS: 300 #${trainer.max_steps}
-    INTERVAL: epoch #step #epoch
-    MONITOR: val/F1_1 #'val/.F1_1'
+    INTERVAL: step #step #epoch
+    MONITOR: val/loss #'val/.F1_1'
     WARMUP_EPOCHS: 0
     BASE_LR: 0.0003
     T_IN_EPOCHS: true

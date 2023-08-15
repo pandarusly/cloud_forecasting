@@ -7,16 +7,27 @@ defaults:
 
 model_checkpoint:
   dirpath: ${paths.output_dir}/checkpoints
-  filename: "epoch_{epoch:03d}"
-  monitor: "val/acc"
-  mode: "max"
+  filename: step_{step:03d}_loss{val/loss:.3f}
+  monitor: ${monitor}
+  verbose: False
   save_last: True
+  save_top_k: 2
+  mode: 'min'
   auto_insert_metric_name: False
+  save_weights_only: False
+  every_n_train_steps: ${ckpt_interval}  
+  train_time_interval: null
+  every_n_epochs: null
+  save_on_train_epoch_end: null
 
 early_stopping:
-  monitor: "val/acc"
+  monitor: ${monitor}
   patience: 100
-  mode: "max"
+  mode: "min"
 
 model_summary:
   max_depth: -1
+
+learning_rate_monitor:
+    _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: ${OptimizerInterval}

@@ -13,7 +13,6 @@ from src.models.components.conv_lstm import schedule_sampling
 from src.models.vendor import build_optimizer, build_scheduler
 from torch import nn
 
-
 class RNNModule(LightningModule, ABC):
     def __init__(
             self,
@@ -106,7 +105,7 @@ class RNNModule(LightningModule, ABC):
         # ims = torch.cat([batch_x, batch_y], dim=1)
         eta, real_input_flag = schedule_sampling(
             eta, num_updates, ims.shape[0], self.model.configs)
-        real_input_flag = real_input_flag.to(batch_x.device)
+        real_input_flag = real_input_flag.to(ims.device)
 
         self.eta = eta
         img_gen = self.forward(frames=ims, mask_true=real_input_flag)

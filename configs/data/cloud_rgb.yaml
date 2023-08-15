@@ -1,8 +1,7 @@
+_target_: src.data.H8Cloud_datamodule.H8CLoudDataModule
 
-train_dir: data/data_cloud/H8JPEG_valid
-val_dir: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8JPEG_valid
 train_config: 
-  data_dir: ${train_dir}
+  data_dir: ${paths.data_dir}/DLDATA/H8JPEG_valid
   use_transform: True
   get_optical_flow: null
   split_path: null
@@ -11,16 +10,20 @@ train_config:
   crop_size: [256, 256]
 
 val_config: 
-  data_dir: ${val_dir}
+  data_dir: ${paths.data_dir}/validate_croped
   use_transform: False
   get_optical_flow: null
-  split_path: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8Data/total_dataset_step_19_interval_19_val.json
+  split_path:  ${paths.data_dir}/valid.json
+  step: 19
+  Intinterval: 19
 
 test_config: 
-  data_dir: ${val_dir}
+  data_dir: ${paths.data_dir}/validate_croped
   use_transform: False
   get_optical_flow: null
-  split_path: /home/pandaru/workspace/cloud_forecasting/data/data_cloud/H8Data/total_dataset_step_19_interval_19_val.json
+  split_path: ${paths.data_dir}/valid.json
+  step: 19
+  Intinterval: 19
 
 batch_size:  2
 batch_size_val:  1

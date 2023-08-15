@@ -681,7 +681,7 @@ def tranvaltest_json_split():
     crop_size = (256, 256)
 
     split_path = f"data/total_dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/DLDATA/H8JPEG_valid"
+    data_dir = "data/DLDATA/H8JPEG_valid" 
 
     dataset = BaseCloudRGBSequenceDataset(
         data_dir=data_dir,
@@ -773,3 +773,5 @@ if __name__ == "__main__":
     # show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path="data/compare.png", format='png', use_rgb=True)
 
     tranvaltest_json_split()
+
+    

@@ -1,65 +1,85 @@
-from typing import Optional, Union
 
-import argparse
-import ast
-
-import torch
 
 import segmentation_models_pytorch as smp
 
-from torch import nn
+import warnings
+
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+def resize(input,
+           size=None,
+           scale_factor=None,
+           mode='nearest',
+           align_corners=None,
+           warning=True):
+    if warning:
+        if size is not None and align_corners:
+            input_h, input_w = tuple(int(x) for x in input.shape[2:])
+            output_h, output_w = tuple(int(x) for x in size)
+            if output_h > input_h or output_w > output_h:
+                if ((output_h > 1 and output_w > 1 and input_h > 1
+                     and input_w > 1) and (output_h - 1) % (input_h - 1)
+                        and (output_w - 1) % (input_w - 1)):
+                    warnings.warn(
+                        f'When align_corners={align_corners}, '
+                        'the output would more aligned if '
+                        f'input size {(input_h, input_w)} is `x+1` and '
+                        f'out size {(output_h, output_w)} is `nx+1`')
+    return F.interpolate(input, size, scale_factor, mode, align_corners)
 
 
 class Channel_Net(nn.Module):  # TODO: add preprocessing Module
-    def __init__(self, hparams: argparse.Namespace):
+    def __init__(self, configs, **kwargs):
         super().__init__()
+        # configs:
+        #     name: "Unet"  # from segmentation_models_pytorch
+        #     pre_seq_length: 7
+        #     aft_seq_length: 12
+        #     total_length: 19
+        #     args: 
+        #         encoder_name: "resnet34"
+        #         encoder_weights: "imagenet"
+        #         in_channels: 7*3
+        #         classes: 12*3
+        #         activation: "sigmoid"
+        self.configs=configs
+        self.unet = getattr(smp, self.configs.name)(**self.configs.args)
 
-        self.hparams = hparams
-
-        self.unet = getattr(smp, self.hparams.name)(**self.hparams.args)
-
-        self.upsample = nn.Upsample(size=(128, 128))
-
-    @staticmethod
-    def add_model_specific_args(
-        parent_parser: Optional[Union[argparse.ArgumentParser, list]] = None
-    ):
-        if parent_parser is None:
-            parent_parser = []
-        elif not isinstance(parent_parser, list):
-            parent_parser = [parent_parser]
-
-        parser = argparse.ArgumentParser(parents=parent_parser, add_help=False)
-
-        parser.add_argument("--name", type=str, default="densenet161")
-        parser.add_argument(
-            "--args",
-            type=ast.literal_eval,
-            default='{"encoder_name": "densenet161", "encoder_weights": "imagenet", "in_channels": 191, "classes": 80, "activation": "sigmoid}',
-        )
-        parser.add_argument("--context_length", type=int, default=10)
-        parser.add_argument("--target_length", type=int, default=20)
-
-        return parser
-
-    def forward(self, data, pred_start: int = 0, n_preds: Optional[int] = None):
-        n_preds = 0 if n_preds is None else n_preds
-
-        satimgs = data["dynamic"][0][:, : self.hparams.context_length, ...]
-
+    def forward(self, data):
+        satimgs = data[:, : self.configs.pre_seq_length, ...]
         b, t, c, h, w = satimgs.shape
-
         satimgs = satimgs.reshape(b, t * c, h, w)
+        
+        outputs = self.unet(satimgs)
+        outputs = resize(
+            outputs,size =(h,w) ,mode="bilinear",align_corners=False
+        ).reshape(b, self.configs.aft_seq_length, c, h, w)
 
-        dem = data["static"][0]
-        clim = data["dynamic"][1][:, :, :5, ...]
-        b, t, c, h2, w2 = clim.shape
-        clim = (
-            clim.reshape(b, t // 5, 5, c, h2, w2)
-            .mean(2)[:, :, :, 39:41, 39:41]
-            .reshape(b, t // 5 * c, 2, 2)
-        )
+        return outputs
 
-        inputs = torch.cat((satimgs, dem, self.upsample(clim)), dim=1)
+if __name__ == "__main__":
 
-        return self.unet(inputs).reshape(b, self.hparams.target_length, 4, h, w), {}
+    from omegaconf import OmegaConf
+    import torch
+    configs = OmegaConf.structured(
+        {
+            "name": "Unet",  # from segmentation_models_pytorch
+            "pre_seq_length": 7,
+            "aft_seq_length": 12,
+            "total_length": 19,
+            "args": {
+                "encoder_name": "resnet34",
+                "encoder_weights": "imagenet",
+                "in_channels": 7*3,
+                "classes": 12*3,
+                "activation": "sigmoid",
+            }
+        }
+    )
+    model = Channel_Net(configs=configs).cuda()
+    data = torch.randn(1,19,3,256,256).cuda()
+
+    res = model(data)
+    print(res.shape)

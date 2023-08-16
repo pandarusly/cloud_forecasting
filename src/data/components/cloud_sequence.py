@@ -149,21 +149,12 @@ def make_dataset_json(
         time_seris_num = 0
         for j in range(0, datatimes_nums, step):
             subsequent_intervals = generate_subsequent_intervals(
-                j, strdatetime_list, datetime_filename_mapping, Intinterval=Intinterval
+                j+i*datatimes_nums, strdatetime_list, datetime_filename_mapping, Intinterval=Intinterval
             )
             if len(subsequent_intervals) == Intinterval:
                 datasets.append(subsequent_intervals)
 
             time_seris_num += 1
-        # len(datatimes_nums)
-        subsequent_intervals = generate_subsequent_intervals(
-            j + datatimes_nums,
-            strdatetime_list,
-            datetime_filename_mapping,
-            Intinterval=Intinterval,
-        )
-        if len(subsequent_intervals) == Intinterval:
-            datasets.append(subsequent_intervals)
 
     if split_path:
         json_path = split_path
@@ -479,7 +470,6 @@ class BaseCloudRGBSequenceDataset(Dataset):
 
 
 #  opencv is slower than pil
-#  TODO:
 class CloudFlowSequenceDataset(BaseCloudRGBSequenceDataset):
     def __init__(self, use_transform=False, Intinterval=19, step=19, *args, **kwargs):
         super().__init__(
@@ -740,7 +730,7 @@ def tranvaltest_json_split():
                     random_string=random_string,
                 )
 
-
+test/loss         │   0.0020648690406233072 
 # ----------------------------------------------------------------
 # ls -l data/DLDATA/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":

@@ -101,3 +101,17 @@ model:
           PATIENCE: 10
           GAMMA: 0.9
  
+
+logger:
+  wandb:
+    _target_: lightning.pytorch.loggers.wandb.WandbLogger
+    save_dir: ${paths.output_dir}
+    offline: false
+    id: null
+    anonymous: null
+    project: lightning-hydra-template #cloud forcasting
+    log_model: false
+    prefix: ''
+    group: ''
+    tags: ${tags}
+    job_type: ''

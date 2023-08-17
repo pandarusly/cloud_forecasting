@@ -1,0 +1,100 @@
+# @package _global_
+
+# to execute this experiment run:
+# python src/train.py experiment=h8cloud_flowU.yaml 
+
+defaults:
+  - override /data: cloud_flow
+  - override /model: channel_net
+  - override /callbacks: default
+  - override /trainer: default
+  - override /logger: wandb 
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["H8Cloude", "optical_flow", "Unet"]
+
+seed: 42
+
+
+#---- dubug
+# OptimizerInterval: 'step'
+# max_iters: 100
+# sampling_stop_iter: 10
+# interval: 10
+# ckpt_interval: 15 #interval+5
+# log_interval: 10
+# monitor: 'val/loss'
+#----
+
+OptimizerInterval: 'step'
+max_iters: 16000
+sampling_stop_iter: 13000
+interval: 1600
+ckpt_interval: 1605 #interval+5
+log_interval: 160
+monitor: 'val/loss'
+
+
+trainer:
+  # limit_train_batches: 0.1
+  # limit_val_batches: 0.5
+  # limit_test_batches: 0.5
+  accelerator: gpu
+  devices: 1
+  max_epochs: -1
+  max_steps:  ${max_iters}
+  val_check_interval: ${interval} #  max_steps//10
+  log_every_n_steps: ${log_interval}
+  check_val_every_n_epoch: null
+  precision: 16
+  gradient_clip_val: 0.5
+  gradient_clip_algorithm: norm
+
+
+data:
+  batch_size:  8
+  batch_size_val:  8
+  num_workers:  8
+  pin_memory:  true
+
+model:
+  hparams:
+    TRAIN:
+      EPOCHS:  ${max_iters}
+      INTERVAL: ${OptimizerInterval}
+      MONITOR: ${monitor}
+      WARMUP_EPOCHS: 0
+      BASE_LR: 0.0003
+      T_IN_EPOCHS: True
+      WARMUP_LR: 1.0e-07
+      MIN_LR: 1.0e-07
+      WEIGHT_DECAY: 0.001
+      OPTIMIZER:
+          NAME: 'adamw'
+          MOMENTUM: 0.9
+          EPS: 1.0e-08
+          BETAS: [0.9, 0.999] 
+      LR_SCHEDULER: 
+          NAME: 'linear'
+          DECAY_RATE: 0.1
+          DECAY_EPOCHS: 6
+          MODE: 'max'
+          PATIENCE: 10
+          GAMMA: 0.9
+ 
+
+logger:
+  wandb:
+    _target_: lightning.pytorch.loggers.wandb.WandbLogger
+    save_dir: ${paths.output_dir}
+    offline: false
+    id: null
+    anonymous: null
+    project: lightning-hydra-template #cloud forcasting
+    log_model: false
+    prefix: 'optical'
+    group: ''
+    tags: ${tags}
+    job_type: ''

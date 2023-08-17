@@ -18,7 +18,7 @@ import pickle
 from imgaug import augmenters as iaa
 from src.data.components.flow_utils import (
     get_optical_flow_pyflow,
-    get_opticalflow_cv2,
+    get_opticalflow,
     write_flo_file,
     read_flo_file,
 )
@@ -201,6 +201,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
         input_frames_num=6,
         crop_size=(1024, 1024),
         div_255=True,
+        flow_version="by_step"
     ):
         if not os.path.exists(data_dir):
             raise FileExistsError(f"data_dir {data_dir} is not exist")
@@ -212,6 +213,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
         self.split_path = split_path
         self.crop_size = crop_size
         self.div_255 = div_255
+        self.flow_version = flow_version
 
         if split_path is not None and os.path.exists(split_path):
             with open(self.split_path, "r") as json_file:
@@ -234,7 +236,7 @@ class BaseCloudRGBSequenceDataset(Dataset):
 
         if get_optical_flow == "opencv_flow":
             self.use_optical_flow = True
-            self._get_optical_flow = get_opticalflow_cv2
+            self._get_optical_flow = get_opticalflow
         elif get_optical_flow == "pyflow":
             self.use_optical_flow = True
             self._get_optical_flow = get_optical_flow_pyflow
@@ -329,15 +331,15 @@ class BaseCloudRGBSequenceDataset(Dataset):
             frames = augmented_frames
 
         if self.use_optical_flow:
-            frames = self._get_optical_flow(frames)
-            filenames = filenames[:-1]
+            frames = self._get_optical_flow(frames,self.flow_version)
+            filenames = filenames[:-1] # TODO: 光流的取值范围 不确定的，可以是 -40 -40 甚至更多,Unet 的末尾 x = F.leaky_relu(self.conv3(x), negative_slope=0.1)
 
         # Convert frames list to a tensor
         frames = np.stack(frames)
         frames = torch.tensor(frames, dtype=torch.float32).permute(
             0, 3, 1, 2
         )  # t h w c -> t c h w
-        if self.div_255:
+        if self.div_255 and not self.use_optical_flow:
             frames = frames/255.
         data = dict(images=frames, filenames=filenames)
         return data
@@ -525,6 +527,7 @@ def process_dataset_maker(PLot=False, flow_type="opencv_flow"):
     crop_size = (256, 256)
     crop_times = 4
     split_path = f"data/crop_dataset_step_{step}_interval_{Intinterval}.json"
+    split_path = f"data/temp.json"
     data_dir = "data/DLDATA/H8JPEG_valid"
 
     augment_save_dir = (
@@ -542,6 +545,8 @@ def process_dataset_maker(PLot=False, flow_type="opencv_flow"):
         Intinterval=Intinterval,
         crop_size=crop_size,
     )
+
+    dataset[0] 
 
     # for _ in tqdm(range(crop_times), position=1, colour="red"):
     #     random_string = generate_random_string(8)
@@ -730,11 +735,11 @@ def tranvaltest_json_split():
                     random_string=random_string,
                 )
 
-test/loss         │   0.0020648690406233072 
+# test/loss         │   0.0020648690406233072 
 # ----------------------------------------------------------------
 # ls -l data/DLDATA/H8JPEG_valid_aug_256/*.jpg | wc -l
 if __name__ == "__main__":
-    # process_dataset_maker(PLot=True, flow_type="opencv_flow")
+    process_dataset_maker(PLot=True, flow_type="pyflow")
     # augment_save_dir = process_dataset_maker(PLot=False, flow_type="none")
     # augment_save_dir = process_dataset_maker(PLot=False, flow_type="opencv_flow")
 
@@ -762,6 +767,6 @@ if __name__ == "__main__":
     # example_idx = 0
     # show_video_line(train_x[example_idx], ncols=6, vmax=0.6, cbar=False, out_path="data/compare.png", format='png', use_rgb=True)
 
-    tranvaltest_json_split()
+    # tranvaltest_json_split()
 
     

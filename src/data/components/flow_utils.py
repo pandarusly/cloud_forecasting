@@ -72,13 +72,8 @@ def read_flo_file(filename):
     return flow_data
 
 
-def get_opticalflow_cv2(image_sequence):
-    # 生成示例数据，19帧[1024, 1024, 3]的随机图像数组
-    # num_frames = 19
-    # image_shape = (1024, 1024, 3)
-    # image_sequence = np.random.randint(
-    #     0, 256, size=(num_frames,) + image_shape, dtype=np.uint8
-    # )
+def get_opticalflow(image_sequence,version="by_step"):
+ 
     num_frames = len(image_sequence)
     # 初始化光流 第一帧
     prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)
@@ -93,18 +88,17 @@ def get_opticalflow_cv2(image_sequence):
         )
         FLOW_ARRAY.append(flow)
         # 更新上一帧
-        # prev_frame = curr_frame
+        if version =="by_step":
+            prev_frame = curr_frame
 
     return FLOW_ARRAY
 
 
-def get_optical_flow_pyflow(image_sequence):
+def get_optical_flow_pyflow(image_sequence,version="by_step"):
     """_summary_
 
     Args:
-        image_sequence (_type_): list of image sequences
-        img_type (int, optional): image type 0 == RGB ( h w 3); 1== GRAY (h w 1). Defaults to 1.
-
+        image_sequence (_type_): list of image sequences which is not normalized.
     Returns:
         _type_: new uv_sequence which length is the length of the image sequence -1.
     pyr_scale: Any, 0.5
@@ -122,18 +116,20 @@ def get_optical_flow_pyflow(image_sequence):
     nOuterFPIterations = int(7)  # 7
     nInnerFPIterations = int(1)  # 1
     nSORIterations = int(30)  # 30
-    img_type = int(1)
+    img_type = int(1) # gray
 
     num_frames = len(image_sequence)
     # 初始化光流 第一帧
-    # prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)[:, :, None]
     prev_frame = image_sequence[0]
+    if prev_frame.shape[-1] == 3:
+        prev_frame = cv2.cvtColor(image_sequence[0], cv2.COLOR_RGB2GRAY)[:, :, None]
     prev_frame = np.ascontiguousarray(prev_frame, dtype=np.float64) / 255.0
     FLOW_ARRAY = []
     # 循环计算稠密光流
     for i in range(1, num_frames):
-        # curr_frame = cv2.cvtColor(image_sequence[i], cv2.COLOR_RGB2GRAY)[:, :, None]
         curr_frame = image_sequence[i]
+        if curr_frame.shape[-1] == 3:
+            curr_frame = cv2.cvtColor(image_sequence[i], cv2.COLOR_RGB2GRAY)[:, :, None]
         curr_frame = np.ascontiguousarray(curr_frame, dtype=np.float64) / 255.0
         u, v, _ = pyflow.coarse2fine_flow(
             prev_frame,
@@ -146,19 +142,36 @@ def get_optical_flow_pyflow(image_sequence):
             nSORIterations,
             img_type,
         )
-        flow = np.concatenate((u[..., None], v[..., None]), axis=2)
+
+        flow = np.concatenate((u[..., None], v[..., None]), axis=2) # h w 2
 
         # 返回一个两通道的光流向量，实际上是每个点的像素位移值
-        # FLOW_ARRAY.append(flow)
+        FLOW_ARRAY.append(flow)
         # 更新上一帧
-        prev_frame = curr_frame
+        if version=="by_step":
+            prev_frame = curr_frame
 
     return FLOW_ARRAY
 
 
+
+
 if __name__ == "__main__":
-    flo = load_flow_to_numpy("frame_0001.flo")
-    print(flo.shape)  # (436, 1024, 2)
-    image = load_flow_to_png("frame_0001.flo")
-    plt.imshow(image)
-    plt.show()
+    # flo = load_flow_to_numpy("frame_0001.flo")
+    # print(flo.shape)  # (436, 1024, 2)
+    # image = load_flow_to_png("frame_0001.flo")
+    # plt.imshow(image)
+    # plt.show()
+    from PIL import Image
+
+    file_paths = [
+    "data/validate_croped/10244OhbVrpoi_H8XX_AHIXX_L2_PRJ_20201208_1500_2000M_PRJ3_EVB1040.jpg",
+    "data/validate_croped/10244OhbVrpoi_H8XX_AHIXX_L2_PRJ_20201208_1510_2000M_PRJ3_EVB1040.jpg"
+    ]
+    image_seq = list(map(lambda path: np.array(Image.open(path).convert("RGB")), file_paths))
+
+    FLOW_ARRAY = get_optical_flow_pyflow(
+        image_seq
+    )
+    for FLOW_ARRAY_ in FLOW_ARRAY:   
+        print(FLOW_ARRAY_.shape)

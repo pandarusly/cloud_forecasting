@@ -1,0 +1,31 @@
+_target_: src.data.H8Cloud_datamodule.H8CLoudDataModule
+
+train_config: 
+  data_dir: ${paths.data_dir}/DLDATA/H8JPEG_valid
+  use_transform: True
+  get_optical_flow: opencv_flow
+  split_path: ${paths.data_dir}/temp.json
+  step: 1
+  Intinterval: 19
+  crop_size: [256, 256]
+
+val_config: 
+  data_dir: ${paths.data_dir}/validate_croped
+  use_transform: False
+  get_optical_flow: opencv_flow
+  split_path:  ${paths.data_dir}/valid.json
+  step: 19
+  Intinterval: 19
+
+test_config: 
+  data_dir: ${paths.data_dir}/validate_croped
+  use_transform: False
+  get_optical_flow: opencv_flow
+  split_path: ${paths.data_dir}/valid.json
+  step: 19
+  Intinterval: 19
+
+batch_size:  8
+batch_size_val:  1
+num_workers:  0
+pin_memory:  False

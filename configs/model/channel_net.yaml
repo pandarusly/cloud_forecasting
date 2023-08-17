@@ -1,40 +1,43 @@
-_target_: src.models.cmo.CMOTask
-
-hparams:
-    pred_dir: null
-    loss:
-        name: "masked"
-        args: {
-            distance_type: "L1"
-        }
-    context_length: 10
-    target_length: 20
-    n_stochastic_preds: 1
-    optimization:
-        optimizer:
-            - 
-                name: 'Adam'
-                args: 
-                    lr: 0.05
-                    betas: [0.9, 0.999]
-        lr_shedule:
-            -
-                name: 'MultiStepLR'
-                args:
-                    milestones: [2, 15, 50, 90]
-                    gamma: 0.1
-    keep_val_preds: True
-    n_log_batches: 1
+_target_: src.models.cmo.UnetModule
+ 
+loss:
+  _target_: torch.nn.L1Loss
 
 net:
   _target_: src.models.components.channel_net.Channel_Net
-  hparams:
+  configs:
     name: "Unet"  # from segmentation_models_pytorch
-    context_length: 10
-    target_length: 20
+    pre_seq_length: 6
+    aft_seq_length: 12
     args: 
         encoder_name: "resnet34"
         encoder_weights: "imagenet"
-        in_channels: 42
-        classes: 80
-        activation: "sigmoid"
+        in_channels: 12
+        classes: 24
+        activation: null
+
+hparams:
+  TRAIN:
+    EPOCHS: 300 #${trainer.max_steps}
+    INTERVAL: step #step #epoch
+    MONITOR: val/loss #'val/.F1_1'
+    WARMUP_EPOCHS: 0
+    BASE_LR: 0.0003
+    T_IN_EPOCHS: true
+    WARMUP_LR: 1.0e-07
+    MIN_LR: 1.0e-07 # 6e-5
+    WEIGHT_DECAY: 0.001
+    OPTIMIZER:
+      NAME: admw #sgd
+      MOMENTUM: 0.9
+      EPS: 1.0e-08
+      BETAS:
+      - 0.9
+      - 0.999
+    LR_SCHEDULER:
+      NAME: linear #on_plateau #linear
+      DECAY_RATE: 0.1
+      DECAY_EPOCHS: 6
+      MODE: max
+      PATIENCE: 10
+      GAMMA: 0.5 #0.9 #0.3 #0.999

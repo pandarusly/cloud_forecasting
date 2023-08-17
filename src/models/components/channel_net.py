@@ -47,15 +47,19 @@ class Channel_Net(nn.Module):  # TODO: add preprocessing Module
         self.configs=configs
         self.unet = getattr(smp, self.configs.name)(**self.configs.args)
 
+    def init_weights(self):
+        self.unet.initialize()
+
     def forward(self, data):
         satimgs = data[:, : self.configs.pre_seq_length, ...]
         b, t, c, h, w = satimgs.shape
         satimgs = satimgs.reshape(b, t * c, h, w)
         
         outputs = self.unet(satimgs)
-        outputs = resize(
-            outputs,size =(h,w) ,mode="bilinear",align_corners=False
-        ).reshape(b, self.configs.aft_seq_length, c, h, w)
+        if outputs.shape[-2:] == (h,w):
+            outputs = resize(
+                outputs,size =(h,w) ,mode="bilinear",align_corners=False
+            ).reshape(b, self.configs.aft_seq_length, c, h, w)
 
         return outputs
 
@@ -72,14 +76,17 @@ if __name__ == "__main__":
             "args": {
                 "encoder_name": "resnet34",
                 "encoder_weights": "imagenet",
-                "in_channels": 7*3,
-                "classes": 12*3,
-                "activation": "sigmoid",
+                "in_channels": 7*2,
+                "classes": 12*2,
+                "activation": None,
             }
         }
     )
     model = Channel_Net(configs=configs).cuda()
-    data = torch.randn(1,19,3,256,256).cuda()
+    data = torch.randn(1,7,2,256,256).cuda()
+
+
 
     res = model(data)
     print(res.shape)
+    print(res.min(),res.max())

@@ -157,3 +157,4 @@ configs/local/default.yaml
 # customize
 pyflow
 third_package/OpenSTL
+demo/*.ckpt

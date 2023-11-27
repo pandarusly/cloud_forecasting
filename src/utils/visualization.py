@@ -93,7 +93,7 @@ def show_video_line(data, ncols, vmax=0.6, cbar=False, format='png', out_path=No
             im.set_clim(0, vmax)
 
     if cbar and ncols > 1:
-        cbaxes = fig.add_axes([0.9, 0.15, 0.04 / ncols, 0.7]) 
+        cbaxes = fig.add_axes([0.9, 0.15, 0.04 / ncols, 0.7])
         cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.1, cax=cbaxes)
 
     plt.show()
@@ -110,7 +110,13 @@ def show_video_gif_multiple(prev, true, pred, out_path=None, use_rgb=False):
             return x.swapaxes(1,2).swapaxes(2,3)
         else: return x
 
+    def to_numpy(arr):
+        if not isinstance(arr,np.ndarray):
+            return arr.numpy()
+        return arr
+
     prev, true, pred = map(swap_axes, [prev, true, pred])
+    prev, true, pred = map(to_numpy, [prev, true, pred])
     prev_frames = prev.shape[0]
     frames = prev_frames + true.shape[0]
     images = []
@@ -153,7 +159,7 @@ def show_video_gif_multiple(prev, true, pred, out_path=None, use_rgb=False):
         imageio.mimsave(out_path, images)
 
 
-def show_video_gif_single(data, out_path=None, use_rgb=False):
+def show_video_gif_single(data, out_path=None,norm=True, use_rgb=False):
     """generate gif with a video sequence"""
     images = []
     if len(data.shape) > 3:
@@ -164,6 +170,8 @@ def show_video_gif_single(data, out_path=None, use_rgb=False):
         if use_rgb:
             data[i] = cv2.cvtColor(data[i], cv2.COLOR_BGR2RGB)
         image = imageio.core.util.Array(data[i])
+        if norm:
+            image =  (image *255).astype(np.uint8)
         images.append(image)
 
     if out_path is not None:

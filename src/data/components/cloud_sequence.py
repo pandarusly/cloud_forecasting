@@ -167,11 +167,7 @@ def make_dataset_json(
 
     if split_path:
         json_path = split_path
-        # json_path = (
-        #     f"data/dataset_step_{step}_interval_{Intinterval}.json"
-        #     if split_path is None
-        #     else split_path
-        # )
+ 
         os.makedirs(os.path.dirname(json_path), exist_ok=True)
         print(
             f"only {time_seris_num} time series is generated wihch has {croped_region_nums} regions ,and {len(datasets)} time series is valid , length is {len(datasets[0])} "
@@ -681,7 +677,7 @@ def tranvaltest_json_split():
     crop_size = (256, 256)
 
     split_path = f"data/total_dataset_step_{step}_interval_{Intinterval}.json"
-    data_dir = "data/DLDATA/H8JPEG_valid" 
+    data_dir = "data/DLDATA/H8JPEG_valid"
 
     dataset = BaseCloudRGBSequenceDataset(
         data_dir=data_dir,
@@ -774,4 +770,4 @@ if __name__ == "__main__":
 
     tranvaltest_json_split()
 
-    
+

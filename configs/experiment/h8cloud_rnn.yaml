@@ -10,7 +10,7 @@ defaults:
   - override /model: convlstm
   - override /callbacks: default
   - override /trainer: default
-  - override /logger: wandb 
+  - override /logger: wandb
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
@@ -43,16 +43,17 @@ trainer:
   # limit_train_batches: 0.1
   # limit_val_batches: 0.5
   # limit_test_batches: 0.5
-  accelerator: gpu
-  devices: 1
   max_epochs: -1
   max_steps:  ${max_iters}
   val_check_interval: ${interval} #  max_steps//10
   log_every_n_steps: ${log_interval}
   check_val_every_n_epoch: null
-  precision: 16
-  gradient_clip_val: 0.5
-  gradient_clip_algorithm: norm
+  accelerator: gpu
+
+  # devices: 1
+  # precision: 16
+  # gradient_clip_val: 0.5
+  # gradient_clip_algorithm: norm
 
 
 data:
@@ -73,7 +74,7 @@ model:
       stride: 1
       layer_norm: 0
       # scheduled sampling
-      scheduled_sampling: 1 # 0,1 
+      scheduled_sampling: 1 # 0,1
       sampling_stop_iter: ${sampling_stop_iter}
       sampling_start_value: 1.0
       sampling_changing_rate: 0.00002
@@ -92,12 +93,11 @@ model:
           NAME: 'adamw'
           MOMENTUM: 0.9
           EPS: 1.0e-08
-          BETAS: [0.9, 0.999] 
-      LR_SCHEDULER: 
+          BETAS: [0.9, 0.999]
+      LR_SCHEDULER:
           NAME: 'linear'
           DECAY_RATE: 0.1
           DECAY_EPOCHS: 6
           MODE: 'max'
           PATIENCE: 10
           GAMMA: 0.9
- 

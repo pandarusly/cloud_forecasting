@@ -1,7 +1,7 @@
 _target_: src.data.H8Cloud_datamodule.H8CLoudDataModule
 
-train_config: 
-  data_dir: ${paths.data_dir}/DLDATA/H8JPEG_valid
+train_config:
+  data_dir: ${paths.root_dir}/demo
   use_transform: True
   get_optical_flow: null
   split_path: null
@@ -9,15 +9,15 @@ train_config:
   Intinterval: 19
   crop_size: [256, 256]
 
-val_config: 
-  data_dir: ${paths.data_dir}/validate_croped
+val_config:
+  data_dir: ${paths.root_dir}/demo
   use_transform: False
   get_optical_flow: null
-  split_path:  ${paths.data_dir}/valid.json
+  split_path:  null
   step: 19
   Intinterval: 19
 
-test_config: 
+test_config:
   data_dir: ${paths.data_dir}/validate_croped
   use_transform: False
   get_optical_flow: null

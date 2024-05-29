@@ -66,9 +66,9 @@ python src/train.py trainer=gpu
 **Train model with chosen experiment configuration from [configs/experiment/](configs/experiment/)**
 
 ```bash
-python src/train.py experiment=h8cloud_rnn
+python src/train.py experiment=h8cloud_rnn_64x64 #  h8cloud_rnn_256x256
 # cpu debug
-python src/train.py experiment=h8cloud_rnn logger=csv debug=default
+python src/train.py experiment=h8cloud_rnn_64x64 logger=csv debug=default
 ```
 
 You can override any parameter from command line like this

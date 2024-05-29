@@ -1,0 +1,111 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: cloud_rgb
+  - override /model: convlstm
+  - override /callbacks: default
+  - override /trainer: default
+  - override /logger: csv
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["H8Cloude", "Convlstm"]
+
+seed: 42
+
+
+# ---- 100 iters
+OptimizerInterval: 'step'
+max_iters: 100
+sampling_stop_iter: 10
+interval: 10
+ckpt_interval: 15 #interval+5
+log_interval: 10
+monitor: 'val/loss'
+# ----
+
+
+trainer:
+  # limit_train_batches: 0.1
+  # limit_val_batches: 0.5
+  # limit_test_batches: 0.5
+  max_epochs: -1
+  max_steps:  ${max_iters}
+  val_check_interval: ${interval} #  max_steps//10
+  log_every_n_steps: ${log_interval}
+  check_val_every_n_epoch: null
+  accelerator: gpu
+
+  # devices: 1
+  # precision: 16
+  # gradient_clip_val: 0.5
+  # gradient_clip_algorithm: norm
+
+
+data:
+  batch_size:  1
+  batch_size_val:  1
+  num_workers:  0
+  pin_memory:  true
+
+  train_config:
+    data_dir: ${paths.root_dir}/demo/v2
+    use_transform: True
+    crop_size: [64, 64]
+
+  val_config:
+    data_dir: ${paths.root_dir}/demo/v2
+    use_transform: True
+    crop_size: [64, 64]
+    split_path: ${paths.data_dir}/v2_valid.json
+
+  test_config: 
+    data_dir: ${paths.root_dir}/demo/v2
+    use_transform: True
+    crop_size: [64, 64]
+    split_path: ${paths.data_dir}/v2_valid.json
+
+
+model:
+  net:
+    configs:
+      in_shape: [19, 3, 64, 64]
+      patch_size: 2
+      pre_seq_length: 7
+      aft_seq_length: 12
+      total_length: 19
+      filter_size: 5
+      stride: 1
+      layer_norm: 0
+      # scheduled sampling
+      scheduled_sampling: 1 # 0,1
+      sampling_stop_iter: ${sampling_stop_iter}
+      sampling_start_value: 1.0
+      sampling_changing_rate: 0.00002
+  hparams:
+    TRAIN:
+      EPOCHS:  ${max_iters}
+      INTERVAL: ${OptimizerInterval}
+      MONITOR: ${monitor}
+      WARMUP_EPOCHS: 0
+      BASE_LR: 0.0003
+      T_IN_EPOCHS: True
+      WARMUP_LR: 1.0e-07
+      MIN_LR: 1.0e-07
+      WEIGHT_DECAY: 0.001
+      OPTIMIZER:
+          NAME: 'adamw'
+          MOMENTUM: 0.9
+          EPS: 1.0e-08
+          BETAS: [0.9, 0.999]
+      LR_SCHEDULER:
+          NAME: 'linear'
+          DECAY_RATE: 0.1
+          DECAY_EPOCHS: 6
+          MODE: 'max'
+          PATIENCE: 10
+          GAMMA: 0.9

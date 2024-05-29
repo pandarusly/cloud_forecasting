@@ -3,7 +3,7 @@
 # to execute this experiment run:
 # python src/train.py experiment=h8cloud_rnn.yaml
 
-# TODO: ImportError: cannot import name 'TypeAliasType' from 'typing_extensions' (/etshome/shinetek/miniconda3/envs/libin39/lib/python3.9/site-packages/typing_extensions.py)
+# TODO: ImportError: cannot import name 'TypeAliasType' from 'typing_extensions' (/typing_extensions.py)
 # pip install typing-extensions --upgrade
 defaults:
   - override /data: cloud_rgb
